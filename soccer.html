@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soccer — MerkurXtip</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Outfit:wght@400;500;600&family=DM+Mono:wght@400;500&family=Oswald:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="soccer.css" />
+</head>
+<body>
+
+  <!-- ── HEADER ──────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="logo">
+      <span class="logo-ball">⚽</span>
+      <span class="logo-name">MERKUR<em>XTIP</em></span>
+      <span class="logo-tag">SOCCER</span>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-f="all">All</button>
+      <button class="tab" data-f="live"><i class="pulse-dot"></i>Live</button>
+      <button class="tab" data-f="upcoming">Upcoming</button>
+    </nav>
+
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="search" class="search" type="text" placeholder="League or team…"
+             autocomplete="off" spellcheck="false" />
+      <button class="search-clear" id="searchClear" title="Clear">✕</button>
+    </div>
+
+    <div class="header-right">
+      <div class="hstats">
+        <div class="hstat"><span class="hstat-n" id="sLeagues">—</span><span class="hstat-l">Leagues</span></div>
+        <div class="hstat-sep"></div>
+        <div class="hstat"><span class="hstat-n" id="sMatches">—</span><span class="hstat-l">Matches</span></div>
+        <div class="hstat-sep"></div>
+        <div class="hstat live"><span class="hstat-n" id="sLive">—</span><span class="hstat-l">Live</span></div>
+      </div>
+      <button class="icon-btn spin-target" id="refreshBtn" title="Refresh data" onclick="loadData()">↺</button>
+    </div>
+  </header>
+
+  <!-- ── BODY ────────────────────────────────────────────────────────── -->
+  <div class="app-body">
+
+    <aside class="sidebar" id="sidebar">
+      <!-- populated by JS -->
+    </aside>
+
+    <main class="content" id="content">
+      <!-- populated by JS -->
+    </main>
+
+  </div>
+
+  <script src="soccer.js"></script>
+</body>
+</html>
