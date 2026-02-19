@@ -14,7 +14,9 @@
       "WebFetch(domain:app.unpkg.com)",
       "WebFetch(domain:www.npmjs.com)",
       "Bash(npm info:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(host:*)",
+      "Bash(nslookup:*)"
     ]
   }
 }

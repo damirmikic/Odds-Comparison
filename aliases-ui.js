@@ -77,6 +77,8 @@ let selMbx = null;
 let filterQuery = '';
 let teamSearchQuery = '';
 let leagueSearchQuery = '';
+let leagueFilterMrk = '';
+let leagueFilterMbx = '';
 
 /* ── Bookie metadata ───────────────────────────────────────── */
 const BK_META = {
@@ -1186,6 +1188,9 @@ document.getElementById('pickerPairSel').addEventListener('change', e => {
     allMrkItems = [];
     allOtherItems = [];
     cachedSuggestions = [];
+    leagueFilterMrk = leagueFilterMbx = '';
+    document.getElementById('leagueFilterMrk').value = '';
+    document.getElementById('leagueFilterMbx').value = '';
     renderPicker();
 });
 document.getElementById('chkLeagueMode').addEventListener('change', e => {
@@ -1194,6 +1199,9 @@ document.getElementById('chkLeagueMode').addEventListener('change', e => {
     allMrkItems = [];
     allOtherItems = [];
     cachedSuggestions = [];
+    leagueFilterMrk = leagueFilterMbx = '';
+    document.getElementById('leagueFilterMrk').value = '';
+    document.getElementById('leagueFilterMbx').value = '';
     renderPicker();
 });
 document.getElementById('chkBrowseAll').addEventListener('change', e => {
@@ -1207,6 +1215,23 @@ document.getElementById('unmatchedSearch').addEventListener('input', e => {
     filterQuery = e.target.value.toLowerCase();
     renderPicker();
 });
+document.getElementById('leagueFilterMrk').addEventListener('input', e => {
+    leagueFilterMrk = e.target.value;
+    renderPicker();
+});
+document.getElementById('leagueFilterMbx').addEventListener('input', e => {
+    leagueFilterMbx = e.target.value;
+    renderPicker();
+});
+
+function populateLeagueDatalist() {
+    const srcLeagues = [...new Set(allMrkItems.flatMap(t => t.leagues))].sort();
+    const tgtLeagues = [...new Set(allOtherItems.flatMap(t => t.leagues))].sort();
+    document.getElementById('leaguesMrkList').innerHTML =
+        srcLeagues.map(l => `<option value="${esc(l)}">`).join('');
+    document.getElementById('leaguesMbxList').innerHTML =
+        tgtLeagues.map(l => `<option value="${esc(l)}">`).join('');
+}
 
 async function loadUnmatched() {
     const btn = document.getElementById('btnLoadUnmatched');
@@ -1225,6 +1250,10 @@ async function loadUnmatched() {
         if (leagueMode) buildLeagueUnmatched(srcMatches, tgtMatches);
         else buildTeamUnmatched(srcMatches, tgtMatches);
 
+        leagueFilterMrk = leagueFilterMbx = '';
+        document.getElementById('leagueFilterMrk').value = '';
+        document.getElementById('leagueFilterMbx').value = '';
+        populateLeagueDatalist();
         renderPicker();
         refreshSuggestions();
         toast(`Loaded live data from APIs`);
@@ -1363,14 +1392,19 @@ function renderPicker() {
     const currentMrk = browseAll ? allMrkItems : unmatchedMrk;
     const currentMbx = browseAll ? allOtherItems : unmatchedMbx;
 
-    const filteredMrk = currentMrk.filter(t =>
-        !q || t.name.toLowerCase().includes(q) ||
-        t.leagues.some(l => l.toLowerCase().includes(q))
-    );
-    const filteredMbx = currentMbx.filter(t =>
-        !q || t.name.toLowerCase().includes(q) ||
-        t.leagues.some(l => l.toLowerCase().includes(q))
-    );
+    const lqMrk = leagueFilterMrk.toLowerCase();
+    const lqMbx = leagueFilterMbx.toLowerCase();
+
+    const filteredMrk = currentMrk.filter(t => {
+        if (q && !t.name.toLowerCase().includes(q) && !t.leagues.some(l => l.toLowerCase().includes(q))) return false;
+        if (lqMrk && !t.leagues.some(l => l.toLowerCase().includes(lqMrk))) return false;
+        return true;
+    });
+    const filteredMbx = currentMbx.filter(t => {
+        if (q && !t.name.toLowerCase().includes(q) && !t.leagues.some(l => l.toLowerCase().includes(q))) return false;
+        if (lqMbx && !t.leagues.some(l => l.toLowerCase().includes(lqMbx))) return false;
+        return true;
+    });
 
     document.getElementById('pickerMrkCount').textContent = filteredMrk.length;
     document.getElementById('pickerMbxCount').textContent = filteredMbx.length;

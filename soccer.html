@@ -27,6 +27,8 @@
       <button class="tab active" data-f="all">All</button>
       <button class="tab" data-f="live"><i class="pulse-dot"></i>Live</button>
       <button class="tab" data-f="upcoming">Upcoming</button>
+      <button class="tab" data-f="value" title="Value bets matched with Sharp bookies">💎 Value</button>
+      <button class="tab" data-f="arbs" title="Arbitrage opportunities">⚖ Arbs</button>
     </nav>
 
     <!-- View mode switcher -->
@@ -62,6 +64,10 @@
         <div class="hstat matched"><span class="hstat-n" id="sMatched">—</span><span class="hstat-l">Matched</span>
         </div>
         <div class="hstat-sep"></div>
+        <div class="hstat value"><span class="hstat-n" id="sValue">—</span><span class="hstat-l">Value</span></div>
+        <div class="hstat-sep"></div>
+        <div class="hstat arbs"><span class="hstat-n" id="sArbs">—</span><span class="hstat-l">Arbs</span></div>
+        <div class="hstat-sep"></div>
         <a href="aliases.html" class="hstat manage" title="Manage team and league aliases">
           <span class="hstat-n">⚙</span>
           <span class="hstat-l">Manage</span>
@@ -85,6 +91,8 @@
     </main>
 
   </div>
+
+  <div id="toastContainer" class="toast-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="aliases.js"></script>

@@ -3,28 +3,28 @@
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 const BOOKIES = [
   {
-    key: 'merkur',  label: 'MRK', cls: 'm',
+    key: 'merkur', label: 'MRK', cls: 'm',
     url: 'https://www.merkurxtip.rs/restapi/offer/en/init',
     parse: data => parseMatches(data),
-    getTeamAliasMap:   () => new Map(),
+    getTeamAliasMap: () => new Map(),
     getLeagueAliasMap: () => new Map(),
-    rawLeagueAliases:  () => [],
+    rawLeagueAliases: () => [],
   },
   {
-    key: 'maxbet',  label: 'MAX', cls: 'b',
+    key: 'maxbet', label: 'MAX', cls: 'b',
     url: 'https://www.maxbet.rs/restapi/offer/en/init',
     parse: data => parseMatches(data).filter(m => !isMaxbetBonus(m)),
-    getTeamAliasMap:   () => buildTeamAliasMap(normTeam),
+    getTeamAliasMap: () => buildTeamAliasMap(normTeam),
     getLeagueAliasMap: () => buildLeagueAliasMap(normLeague),
-    rawLeagueAliases:  () => getLeagueAliases(),
+    rawLeagueAliases: () => getLeagueAliases(),
   },
   {
     key: 'soccerbet', label: 'SBT', cls: 's',
     url: 'https://www.soccerbet.rs/restapi/offer/en/init',
     parse: data => parseSoccerbetMatches(data),
-    getTeamAliasMap:   () => buildSoccerbetTeamAliasMap(normTeam),
+    getTeamAliasMap: () => buildSoccerbetTeamAliasMap(normTeam),
     getLeagueAliasMap: () => buildSoccerbetLeagueAliasMap(normLeague),
-    rawLeagueAliases:  () => getSoccerbetLeagueAliases(),
+    rawLeagueAliases: () => getSoccerbetLeagueAliases(),
     getCrossAliasMaps: () => ({
       maxbet: { team: buildMaxbetSbtTeamAliasMap(normTeam), league: buildMaxbetSbtLeagueAliasMap(normLeague) },
     }),
@@ -33,17 +33,17 @@ const BOOKIES = [
     key: 'cloudbet', label: 'CLB', cls: 'cl',
     url: () => {
       const now = Math.floor(Date.now() / 1000);
-      const to  = now + 7 * 24 * 3600;
+      const to = now + 7 * 24 * 3600;
       return `https://sports-api.cloudbet.com/pub/v2/odds/events?sport=soccer&live=false&from=${now}&to=${to}&markets=soccer.match_odds&markets=soccer.total_goals&players=false&limit=2000`;
     },
     headers: { 'X-API-Key': 'eyJhbGciOiJSUzI1NiIsImtpZCI6IkhKcDkyNnF3ZXBjNnF3LU9rMk4zV05pXzBrRFd6cEdwTzAxNlRJUjdRWDAiLCJ0eXAiOiJKV1QifQ.eyJhY2Nlc3NfdGllciI6InRyYWRpbmciLCJleHAiOjIwNjE1Mzc1MDIsImlhdCI6MTc0NjE3NzUwMiwianRpIjoiNTU1ODk0NjgtZjJhZi00ZGQ3LWE3MTQtZjNiNjgyMWU4OGRkIiwic3ViIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3IiwidGVuYW50IjoiY2xvdWRiZXQiLCJ1dWlkIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3In0.BW_nXSwTkxTI7C-1UzgxWLnNzo9Bo1Ed8hI9RfVLnrJa6sfsMyvQ1NrtT5t6i_emwhkRHU1hY-9i6c2c5AI4fc2mRLSNBujvrfbVHX67uB58E8TeSOZUBRi0eqfLBL7sYl1JNPZzhFkDBCBNFJZJpn40FIjIrtIiPd-G5ClaaSMRWrFUDiwA1NmyxHSfkfRpeRSnfk15qck7zSIeNeITzPbD7kZGDIeStmcHuiHfcQX3NaHaI0gyw60wmDgan83NpYQYRVLQ9C4icbNhel4n5H5FGFAxQS8IcvynqV8f-vz2t4BRGuYXBU8uhdYKgezhyQrSvX6NpwNPBJC8CWo2fA' },
     parse: data => parseCloudbetMatches(data),
-    getTeamAliasMap:   () => buildCloudbetTeamAliasMap(normTeam),
+    getTeamAliasMap: () => buildCloudbetTeamAliasMap(normTeam),
     getLeagueAliasMap: () => buildCloudbetLeagueAliasMap(normLeague),
-    rawLeagueAliases:  () => getCloudbetLeagueAliases(),
+    rawLeagueAliases: () => getCloudbetLeagueAliases(),
     getCrossAliasMaps: () => ({
-      maxbet:    { team: buildMaxbetClbTeamAliasMap(normTeam),  league: buildMaxbetClbLeagueAliasMap(normLeague) },
-      soccerbet: { team: buildSbtClbTeamAliasMap(normTeam),     league: buildSbtClbLeagueAliasMap(normLeague) },
+      maxbet: { team: buildMaxbetClbTeamAliasMap(normTeam), league: buildMaxbetClbLeagueAliasMap(normLeague) },
+      soccerbet: { team: buildSbtClbTeamAliasMap(normTeam), league: buildSbtClbLeagueAliasMap(normLeague) },
     }),
   },
 ];
@@ -87,6 +87,9 @@ let selectedLeague = null;
 let viewMode = 'compare'; // 'compare' | 'merkur' | 'maxbet' | 'soccerbet'
 
 const collapsedCountries = new Set();
+
+let autoRefreshInterval = null;
+let autoRefreshSeconds = 60;
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    UTILS
@@ -140,6 +143,83 @@ function fmtTime(ts) {
 
 function fmtOdd(v) {
   return (v == null || !isFinite(v) || v <= 0) ? '—' : parseFloat(v).toFixed(2);
+}
+
+function valid(v) { return isFinite(v) && v > 0; }
+
+/**
+ * Calculate fair (margin-free) probabilities from bookmaker odds.
+ * Uses simple normalization (Equal Margin removal).
+ */
+function getFairProbs(h, x, a) {
+  if (!valid(h) || !valid(x) || !valid(a)) return null;
+  const sum = (1 / h) + (1 / x) + (1 / a);
+  return {
+    h: (1 / h) / sum,
+    x: (1 / x) / sum,
+    a: (1 / a) / sum,
+    margin: sum - 1
+  };
+}
+
+/**
+ * Perform trader-specific calculations for a match:
+ * 1. Arbitrage detection across all bookmakers.
+ * 2. Value detection using Cloudbet as the sharp reference.
+ */
+function calculateTraderSpecs(m) {
+  const bks = m.bookmakers;
+  const allParsed = BOOKIES
+    .map(bk => bks[bk.key] ? extractOdds(bks[bk.key].odds) : null)
+    .filter(Boolean);
+
+  // 1. ARBITRAGE (across all bookmakers)
+  const maxH = Math.max(...allParsed.map(o => o.h).filter(valid), 0);
+  const maxX = Math.max(...allParsed.map(o => o.x).filter(valid), 0);
+  const maxA = Math.max(...allParsed.map(o => o.a).filter(valid), 0);
+
+  if (maxH > 0 && maxX > 0 && maxA > 0) {
+    const arbProb = (1 / maxH) + (1 / maxX) + (1 / maxA);
+    if (arbProb < 0.999) { // Using 0.999 to avoid float precision issues with perfect markets
+      m.arb = {
+        roi: (1 / arbProb) - 1,
+        h: maxH, x: maxX, a: maxA
+      };
+    }
+  }
+
+  // 2. VALUE (Sharp reference = Cloudbet)
+  const sharpOdds = bks.cloudbet ? extractOdds(bks.cloudbet.odds) : null;
+  if (sharpOdds && valid(sharpOdds.h) && valid(sharpOdds.x) && valid(sharpOdds.a)) {
+    const fair = getFairProbs(sharpOdds.h, sharpOdds.x, sharpOdds.a);
+    if (fair) {
+      m.valueBets = [];
+      // Compare Merkur, Maxbet, Soccerbet against Cloudbet fair prices
+      ['merkur', 'maxbet', 'soccerbet'].forEach(bkKey => {
+        const bkData = bks[bkKey];
+        if (!bkData) return;
+        const bkOdds = extractOdds(bkData.odds);
+
+        ['h', 'x', 'a'].forEach(outcome => {
+          if (valid(bkOdds[outcome])) {
+            const ev = bkOdds[outcome] * fair[outcome];
+            if (ev > 1.01) { // 1% minimum edge
+              m.valueBets.push({
+                bk: bkKey,
+                outcome,
+                odd: bkOdds[outcome],
+                fair: 1 / fair[outcome],
+                ev: ev - 1
+              });
+            }
+          }
+        });
+      });
+      if (m.valueBets.length > 0) {
+        m.valueBets.sort((a, b) => b.ev - a.ev);
+      }
+    }
+  }
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -270,10 +350,10 @@ function parseMatches(data) {
  */
 function isSbtOutright(m) {
   const league = (m.leagueName || '').toLowerCase();
-  const home   = (m.home || '').toLowerCase();
-  const away   = (m.away || '').toLowerCase();
+  const home = (m.home || '').toLowerCase();
+  const away = (m.away || '').toLowerCase();
   return league.includes('pobednik') || /\d{4}\/\d{2}/.test(league)
-      || home.includes('pobednik')   || away.includes('pobednik');
+    || home.includes('pobednik') || away.includes('pobednik');
 }
 
 function isMaxbetBonus(m) {
@@ -355,7 +435,7 @@ function parseCloudbetMatches(data) {
       if (ftGoals) {
         for (const sel of (ftGoals.selections || [])) {
           if (sel.status !== 'SELECTION_ENABLED' || sel.params !== 'total=2.5') continue;
-          if (sel.outcome === 'over')  odds['24'] = sel.price;
+          if (sel.outcome === 'over') odds['24'] = sel.price;
           if (sel.outcome === 'under') odds['22'] = sel.price;
         }
       }
@@ -577,8 +657,8 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
   const TIME_STRICT = 30 * 60 * 1000;
 
   const newNorm = newList.map(m => ({
-    home:   normTeam(m.home),
-    away:   normTeam(m.away),
+    home: normTeam(m.home),
+    away: normTeam(m.away),
     league: normLeague(m.leagueName),
   }));
 
@@ -597,12 +677,12 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
     const mkL = normLeague(mk.leagueName);
 
     // When merkur is absent, check cross-bookie maps for the first other present bookie
-    let activeTeamMap   = teamAliasMap;
+    let activeTeamMap = teamAliasMap;
     let activeLeagueMap = leagueAliasMap;
     if (!mk.bookmakers.merkur) {
       for (const [bk, maps] of Object.entries(crossAliasMaps)) {
         if (mk.bookmakers[bk] !== null) {
-          activeTeamMap   = maps.team;
+          activeTeamMap = maps.team;
           activeLeagueMap = maps.league;
           break;
         }
@@ -619,7 +699,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
       if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
       const homeMatch = targetHs ? targetHs.has(newNorm[i].home) : (mkH === newNorm[i].home);
       const awayMatch = targetAs ? targetAs.has(newNorm[i].away) : (mkA === newNorm[i].away);
-      const targetLs  = activeLeagueMap.get(mkL);
+      const targetLs = activeLeagueMap.get(mkL);
       const leagueMatch = (targetLs && targetLs.has(newNorm[i].league)) || (mkL === newNorm[i].league);
       if (homeMatch && awayMatch && leagueMatch) return i;
     }
@@ -726,6 +806,14 @@ function getFilteredMatches() {
   // Tab filter
   if (activeFilter === 'live') ms = ms.filter(m => m.live);
   if (activeFilter === 'upcoming') ms = ms.filter(m => !m.live);
+  if (activeFilter === 'value') {
+    ms = ms.filter(m => m.valueBets && m.valueBets.length > 0)
+      .sort((a, b) => b.valueBets[0].ev - a.valueBets[0].ev);
+  }
+  if (activeFilter === 'arbs') {
+    ms = ms.filter(m => m.arb)
+      .sort((a, b) => b.arb.roi - a.arb.roi);
+  }
 
   // Sidebar league filter
   if (selectedLeague) ms = ms.filter(m => m.leagueName === selectedLeague);
@@ -867,7 +955,7 @@ function getOddClass(val, lo, hi) {
  * allOddsArr: array of extractOdds() results for every bookie present on this match.
  * Highlights best (green), worst (red), middle/tied (neutral) across all bookies.
  */
-function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr) {
+function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey) {
   function cellCls(key) {
     const me = myOdds[key];
     if (!valid(me)) return 'na';
@@ -886,15 +974,20 @@ function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr) {
     return valid(v) ? v.toFixed(2) : '—';
   }
 
+  function extraCls(key) {
+    const vbet = (valueBets || []).find(vb => vb.bk === bkKey && vb.outcome === key);
+    return vbet ? ' value-highlight' : '';
+  }
+
   return `
     <div class="bk-row bk-row-${bkCls}">
       <div class="bk-label">${bkLabel}</div>
-      <div class="m-odd cmp-odd ${cellCls('h')}" title="Home win">${cellTxt('h')}</div>
-      <div class="m-odd cmp-odd ${cellCls('x')}" title="Draw">${cellTxt('x')}</div>
-      <div class="m-odd cmp-odd ${cellCls('a')}" title="Away win">${cellTxt('a')}</div>
+      <div class="m-odd cmp-odd ${cellCls('h')}${extraCls('h')}" title="Home win">${cellTxt('h')}</div>
+      <div class="m-odd cmp-odd ${cellCls('x')}${extraCls('x')}" title="Draw">${cellTxt('x')}</div>
+      <div class="m-odd cmp-odd ${cellCls('a')}${extraCls('a')}" title="Away win">${cellTxt('a')}</div>
       <div class="m-line">2.5</div>
-      <div class="m-odd cmp-odd ${cellCls('ov')}" title="Over 2.5">${cellTxt('ov')}</div>
-      <div class="m-odd cmp-odd ${cellCls('un')}" title="Under 2.5">${cellTxt('un')}</div>
+      <div class="m-odd cmp-odd ${cellCls('ov')}${extraCls('ov')}" title="Over 2.5">${cellTxt('ov')}</div>
+      <div class="m-odd cmp-odd ${cellCls('un')}${extraCls('un')}" title="Under 2.5">${cellTxt('un')}</div>
     </div>`;
 }
 
@@ -917,8 +1010,17 @@ function renderMatchCompare(m, isLive, timeStr) {
   }));
   const allOdds = oddsPerBk.filter(o => o.data !== null).map(o => o.parsed);
   const rows = oddsPerBk
-    .map(({ bk, data, parsed }) => data !== null ? renderBkRow(bk.label, bk.cls, parsed, allOdds) : '')
+    .map(({ bk, data, parsed }) => data !== null ? renderBkRow(bk.label, bk.cls, parsed, allOdds, m.valueBets, bk.key) : '')
     .join('');
+
+  let badges = '';
+  if (m.arb) {
+    badges += `<span class="vbet-badge vbet-badge-arb">⚖ Arb ${(m.arb.roi * 100).toFixed(1)}%</span>`;
+  }
+  if (m.valueBets && m.valueBets.length > 0) {
+    const topEv = Math.max(...m.valueBets.map(v => v.ev));
+    badges += `<span class="vbet-badge vbet-badge-value">💎 Value ${(topEv * 100).toFixed(1)}%</span>`;
+  }
 
   return `
     <div class="match-group${isLive ? ' is-live' : ''}${m.matched ? ' is-matched' : ''}">
@@ -928,6 +1030,7 @@ function renderMatchCompare(m, isLive, timeStr) {
           <div class="m-home" title="${esc(m.home)}">${esc(m.home)}</div>
           <div class="m-away" title="${esc(m.away)}">${esc(m.away)}</div>
         </div>
+        <div class="mg-badges">${badges}</div>
       </div>
       <div class="mg-rows">${rows}</div>
     </div>`;
@@ -1022,12 +1125,77 @@ function renderLeagueBlock(g, idx) {
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   RENDER — RANKED LIST (Value / Arbs tabs)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function renderRankedList(ms) {
+  const isValue = activeFilter === 'value';
+  const isCompare = viewMode === 'compare';
+
+  const colHead = isCompare
+    ? `<div class="match-col-head cmp-col-head">
+        <span class="ch-match">Match</span>
+        <span class="ch-bk">Bookie</span>
+        <span class="ch-1">1</span>
+        <span class="ch-x">X</span>
+        <span class="ch-2">2</span>
+        <span class="ch-line">Line</span>
+        <span class="ch-ov">Over</span>
+        <span class="ch-un">Under</span>
+      </div>`
+    : `<div class="match-col-head">
+        <span>Time</span>
+        <span>Match</span>
+        <span class="ch-1">1</span>
+        <span class="ch-x">X</span>
+        <span class="ch-2">2</span>
+        <span class="ch-line">Line</span>
+        <span class="ch-ov">Over</span>
+        <span class="ch-un">Under</span>
+        <span></span>
+      </div>`;
+
+  const rows = ms.map((m, i) => {
+    const rank = i + 1;
+    const isLive = Boolean(m.live);
+    const timeStr = isLive ? 'LIVE' : fmtTime(m.kickOffTime);
+    const matchHtml = isCompare
+      ? renderMatchCompare(m, isLive, timeStr)
+      : renderMatchSingle(m, m.bookmakers[viewMode], isLive, timeStr);
+
+    const metricVal = isValue
+      ? Math.max(...m.valueBets.map(v => v.ev)) * 100
+      : m.arb.roi * 100;
+    const metricHtml = isValue
+      ? `<span class="rank-metric rank-ev">EV +${metricVal.toFixed(2)}%</span>`
+      : `<span class="rank-metric rank-roi">ROI +${metricVal.toFixed(2)}%</span>`;
+
+    const country = parseCountry(m.leagueName);
+    const lname = parseLeagueName(m.leagueName);
+    const leagueLabel = country !== 'Other'
+      ? `${getFlag(country)} ${esc(country)} · ${esc(lname)}`
+      : `${getFlag(country)} ${esc(lname)}`;
+
+    return `
+      <div class="ranked-item" style="animation-delay:${Math.min(i * 16, 480)}ms">
+        <div class="ranked-header">
+          <span class="ranked-num">#${rank}</span>
+          <span class="ranked-league">${leagueLabel}</span>
+          ${metricHtml}
+        </div>
+        ${matchHtml}
+      </div>`;
+  }).join('');
+
+  return `<div class="ranked-list">${colHead}${rows}</div>`;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    RENDER — CONTENT
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function renderContent() {
   const content = document.getElementById('content');
   const ms = getFilteredMatches();
-  const groups = groupByLeague(ms);
+  const isRanked = activeFilter === 'value' || activeFilter === 'arbs';
 
   let crumb = 'All Matches';
   if (selectedLeague) {
@@ -1038,16 +1206,15 @@ function renderContent() {
       : esc(lname);
   }
 
-  const matchedN = ms.filter(m => m.matched).length;
-  const countTxt = viewMode === 'compare'
-    ? `${groups.length} league${groups.length !== 1 ? 's' : ''} · ${ms.length} match${ms.length !== 1 ? 'es' : ''} · <span class="matched-count">${matchedN} matched</span>`
-    : `${groups.length} league${groups.length !== 1 ? 's' : ''} · ${ms.length} match${ms.length !== 1 ? 'es' : ''}`;
+  const cdSecs = autoRefreshSeconds > 0 ? autoRefreshSeconds : 60;
+  const cdUrgent = autoRefreshSeconds <= 10 && autoRefreshSeconds > 0 ? ' urgent' : '';
+  const cdHtml = `<span id="autoRefreshCountdown" class="content-countdown${cdUrgent}" title="Next auto-refresh">↺ ${cdSecs}s</span>`;
 
-  if (!groups.length) {
+  if (!ms.length) {
     content.innerHTML = `
       <div class="content-bar">
         <span class="content-crumb">${crumb}</span>
-        <span class="content-count">${countTxt}</span>
+        ${cdHtml}
       </div>
       <div class="state-center">
         <span class="empty-text">No matches found</span>
@@ -1055,10 +1222,21 @@ function renderContent() {
     return;
   }
 
+  if (isRanked) {
+    content.innerHTML = `
+      <div class="content-bar">
+        <span class="content-crumb">${crumb}</span>
+        ${cdHtml}
+      </div>
+      ${renderRankedList(ms)}`;
+    return;
+  }
+
+  const groups = groupByLeague(ms);
   content.innerHTML = `
     <div class="content-bar">
       <span class="content-crumb">${crumb}</span>
-      <span class="content-count">${countTxt}</span>
+      ${cdHtml}
     </div>
     ${groups.map((g, i) => renderLeagueBlock(g, i)).join('')}`;
 }
@@ -1098,9 +1276,67 @@ function setViewMode(mode) {
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ALERTS & NOTIFICATIONS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+function showToast(type, match, metric) {
+  const container = document.getElementById('toastContainer');
+  const div = document.createElement('div');
+  const label = type === 'arb'
+    ? `ARB +${(metric * 100).toFixed(2)}%`
+    : `VALUE  EV +${(metric * 100).toFixed(2)}%`;
+  div.className = `toast toast-${type}`;
+  div.innerHTML = `
+    <div class="toast-label">${label}</div>
+    <div class="toast-match">${esc(match.home)} vs ${esc(match.away)}</div>
+    <div class="toast-league">${esc(match.leagueName)}</div>
+    <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+  `;
+  container.prepend(div);
+  setTimeout(() => div.classList.add('toast-fade'), 7000);
+  setTimeout(() => div.remove(), 7500);
+}
+
+function sendBrowserNotification(type, match, metric) {
+  if (document.visibilityState === 'visible') return;
+  if (Notification.permission !== 'granted') return;
+  const title = type === 'arb'
+    ? `New ARB +${(metric * 100).toFixed(2)}%`
+    : `New Value Bet  EV +${(metric * 100).toFixed(2)}%`;
+  new Notification(title, {
+    body: `${match.home} vs ${match.away}\n${match.leagueName}`
+  });
+}
+
+function notifyNewOpportunities(prevArbKeys, prevValueKeys) {
+  // Skip on first load when there was no previous data
+  if (prevArbKeys.size === 0 && prevValueKeys.size === 0) return;
+  allMatches.forEach(m => {
+    const key = `${m.home}|${m.away}|${m.leagueName}`;
+    if (m.arb && !prevArbKeys.has(key)) {
+      showToast('arb', m, m.arb.roi);
+      sendBrowserNotification('arb', m, m.arb.roi);
+    }
+    if (m.valueBets && m.valueBets.length > 0 && !prevValueKeys.has(key)) {
+      const topEV = Math.max(...m.valueBets.map(v => v.ev));
+      showToast('value', m, topEV);
+      sendBrowserNotification('value', m, topEV);
+    }
+  });
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    FETCH
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 async function loadData() {
+  // Snapshot current opportunities before fetching new data (for diffing)
+  const prevArbKeys = new Set(
+    allMatches.filter(m => m.arb).map(m => `${m.home}|${m.away}|${m.leagueName}`)
+  );
+  const prevValueKeys = new Set(
+    allMatches.filter(m => m.valueBets && m.valueBets.length > 0).map(m => `${m.home}|${m.away}|${m.leagueName}`)
+  );
+
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('spinning');
 
@@ -1116,7 +1352,7 @@ async function loadData() {
 
     // ── FETCH all bookmakers in parallel ───────────────────
     const responses = await Promise.all(BOOKIES.map(b => {
-      const url  = typeof b.url === 'function' ? b.url() : b.url;
+      const url = typeof b.url === 'function' ? b.url() : b.url;
       const opts = b.headers ? { headers: b.headers } : {};
       return fetch(url, opts);
     }));
@@ -1124,7 +1360,7 @@ async function loadData() {
       if (!responses[i].ok) throw new Error(`${b.key} HTTP ${responses[i].status}`);
     });
     const rawData = await Promise.all(responses.map(r => r.json()));
-    const parsed  = BOOKIES.map((b, i) => b.parse(rawData[i]));
+    const parsed = BOOKIES.map((b, i) => b.parse(rawData[i]));
 
     // ── LEAGUE ALIAS NORMALIZATION ─────────────────────────
     // Build display name override map (highest priority — user-defined canonical names)
@@ -1174,21 +1410,28 @@ async function loadData() {
       merged = mergeBookmaker(merged, parsed[i], bk.key, bk.getTeamAliasMap(), bk.getLeagueAliasMap(), cross);
     }
     allMatches = merged;
+    allMatches.forEach(calculateTraderSpecs);
 
     // Header stats
     const liveN = allMatches.filter(m => m.live).length;
     const leagueN = new Set(allMatches.map(m => m.leagueName)).size;
     const matchedN = allMatches.filter(m => m.matched).length;
+    const valueN = allMatches.filter(m => m.valueBets && m.valueBets.length > 0).length;
+    const arbN = allMatches.filter(m => m.arb).length;
 
     document.getElementById('sLeagues').textContent = leagueN;
     document.getElementById('sMatches').textContent = allMatches.length;
     document.getElementById('sLive').textContent = liveN;
     document.getElementById('sMatched').textContent = matchedN;
+    document.getElementById('sValue').textContent = valueN;
+    document.getElementById('sArbs').textContent = arbN;
+    // We can potentially repurpose or add more stat display here later.
 
     selectedLeague = null;
 
     renderSidebar();
     renderContent();
+    notifyNewOpportunities(prevArbKeys, prevValueKeys);
 
   } catch (err) {
     console.error(err);
@@ -1206,6 +1449,22 @@ async function loadData() {
       </div>`;
   } finally {
     btn.classList.remove('spinning');
+
+    // Restart 60-second auto-refresh countdown
+    clearInterval(autoRefreshInterval);
+    autoRefreshSeconds = 60;
+    autoRefreshInterval = setInterval(() => {
+      autoRefreshSeconds--;
+      const el = document.getElementById('autoRefreshCountdown');
+      if (el) {
+        el.textContent = `↺ ${autoRefreshSeconds}s`;
+        el.classList.toggle('urgent', autoRefreshSeconds <= 10);
+      }
+      if (autoRefreshSeconds <= 0) {
+        clearInterval(autoRefreshInterval);
+        loadData();
+      }
+    }, 1000);
   }
 }
 
@@ -1282,4 +1541,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ── INIT ─────────────────────────────────────────────────────────────
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
 loadData();
