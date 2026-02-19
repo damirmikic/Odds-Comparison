@@ -91,6 +91,9 @@ const collapsedCountries = new Set();
 let autoRefreshInterval = null;
 let autoRefreshSeconds = 60;
 
+const prevOddsMap = new Map(); // key: home|away|leagueName|bkKey → { h, x, a, ov, un }
+let pendingFlash = false;
+
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    UTILS
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
@@ -955,7 +958,15 @@ function getOddClass(val, lo, hi) {
  * allOddsArr: array of extractOdds() results for every bookie present on this match.
  * Highlights best (green), worst (red), middle/tied (neutral) across all bookies.
  */
-function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey) {
+function getOddMovement(matchKey, bkKey, outcomeKey, currentVal) {
+  const prev = prevOddsMap.get(`${matchKey}|${bkKey}`);
+  if (!prev || !valid(currentVal) || !valid(prev[outcomeKey])) return null;
+  if (currentVal > prev[outcomeKey]) return 'up';
+  if (currentVal < prev[outcomeKey]) return 'down';
+  return null;
+}
+
+function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey, matchKey) {
   function cellCls(key) {
     const me = myOdds[key];
     if (!valid(me)) return 'na';
@@ -966,7 +977,7 @@ function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey) {
     if (best === worst) return 'equal';
     if (me === best) return 'better';
     if (me === worst) return 'worse';
-    return 'equal'; // middle value — neutral
+    return 'equal';
   }
 
   function cellTxt(key) {
@@ -979,15 +990,28 @@ function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey) {
     return vbet ? ' value-highlight' : '';
   }
 
+  function moveMeta(key) {
+    const dir = matchKey ? getOddMovement(matchKey, bkKey, key, myOdds[key]) : null;
+    if (!dir) return { cls: '', el: '', attr: '' };
+    return {
+      cls: ` odd-${dir}`,
+      el: `<span class="odd-arrow">${dir === 'up' ? '▲' : '▼'}</span>`,
+      attr: ` data-moved="${dir}"`,
+    };
+  }
+
+  const mH = moveMeta('h'), mX = moveMeta('x'), mA = moveMeta('a');
+  const mOv = moveMeta('ov'), mUn = moveMeta('un');
+
   return `
     <div class="bk-row bk-row-${bkCls}">
       <div class="bk-label">${bkLabel}</div>
-      <div class="m-odd cmp-odd ${cellCls('h')}${extraCls('h')}" title="Home win">${cellTxt('h')}</div>
-      <div class="m-odd cmp-odd ${cellCls('x')}${extraCls('x')}" title="Draw">${cellTxt('x')}</div>
-      <div class="m-odd cmp-odd ${cellCls('a')}${extraCls('a')}" title="Away win">${cellTxt('a')}</div>
+      <div class="m-odd cmp-odd ${cellCls('h')}${extraCls('h')}${mH.cls}" title="Home win"${mH.attr}>${mH.el}${cellTxt('h')}</div>
+      <div class="m-odd cmp-odd ${cellCls('x')}${extraCls('x')}${mX.cls}" title="Draw"${mX.attr}>${mX.el}${cellTxt('x')}</div>
+      <div class="m-odd cmp-odd ${cellCls('a')}${extraCls('a')}${mA.cls}" title="Away win"${mA.attr}>${mA.el}${cellTxt('a')}</div>
       <div class="m-line">2.5</div>
-      <div class="m-odd cmp-odd ${cellCls('ov')}${extraCls('ov')}" title="Over 2.5">${cellTxt('ov')}</div>
-      <div class="m-odd cmp-odd ${cellCls('un')}${extraCls('un')}" title="Under 2.5">${cellTxt('un')}</div>
+      <div class="m-odd cmp-odd ${cellCls('ov')}${extraCls('ov')}${mOv.cls}" title="Over 2.5"${mOv.attr}>${mOv.el}${cellTxt('ov')}</div>
+      <div class="m-odd cmp-odd ${cellCls('un')}${extraCls('un')}${mUn.cls}" title="Under 2.5"${mUn.attr}>${mUn.el}${cellTxt('un')}</div>
     </div>`;
 }
 
@@ -1003,6 +1027,7 @@ function renderMatch(m) {
 }
 
 function renderMatchCompare(m, isLive, timeStr) {
+  const matchKey = `${m.home}|${m.away}|${m.leagueName}`;
   const oddsPerBk = BOOKIES.map(bk => ({
     bk,
     data: m.bookmakers[bk.key],
@@ -1010,7 +1035,7 @@ function renderMatchCompare(m, isLive, timeStr) {
   }));
   const allOdds = oddsPerBk.filter(o => o.data !== null).map(o => o.parsed);
   const rows = oddsPerBk
-    .map(({ bk, data, parsed }) => data !== null ? renderBkRow(bk.label, bk.cls, parsed, allOdds, m.valueBets, bk.key) : '')
+    .map(({ bk, data, parsed }) => data !== null ? renderBkRow(bk.label, bk.cls, parsed, allOdds, m.valueBets, bk.key, matchKey) : '')
     .join('');
 
   let badges = '';
@@ -1037,6 +1062,8 @@ function renderMatchCompare(m, isLive, timeStr) {
 }
 
 function renderMatchSingle(m, src, isLive, timeStr) {
+  const matchKey = `${m.home}|${m.away}|${m.leagueName}`;
+  const bkKey = viewMode;
   const odds = src?.odds || {};
   const raw = {
     h: parseFloat(odds['1']),
@@ -1053,6 +1080,19 @@ function renderMatchSingle(m, src, isLive, timeStr) {
   const ouHi = ouVals.length ? Math.max(...ouVals) : null;
   const more = (src?.oddsCount || 0) > 5 ? `+${src.oddsCount - 5}` : '';
 
+  function moveMeta(key) {
+    const dir = getOddMovement(matchKey, bkKey, key, raw[key]);
+    if (!dir) return { cls: '', el: '', attr: '' };
+    return {
+      cls: ` odd-${dir}`,
+      el: `<span class="odd-arrow">${dir === 'up' ? '▲' : '▼'}</span>`,
+      attr: ` data-moved="${dir}"`,
+    };
+  }
+
+  const mH = moveMeta('h'), mX = moveMeta('x'), mA = moveMeta('a');
+  const mOv = moveMeta('ov'), mUn = moveMeta('un');
+
   return `
     <div class="match-row${isLive ? ' is-live' : ''}">
       <div class="m-time${isLive ? ' live' : ''}">${esc(timeStr)}</div>
@@ -1060,12 +1100,12 @@ function renderMatchSingle(m, src, isLive, timeStr) {
         <div class="m-home" title="${esc(m.home)}">${esc(m.home)}</div>
         <div class="m-away" title="${esc(m.away)}">${esc(m.away)}</div>
       </div>
-      <div class="m-odd ${getOddClass(raw.h, lo, hi)}" title="Home win">${fmtOdd(raw.h)}</div>
-      <div class="m-odd ${getOddClass(raw.x, lo, hi)}" title="Draw">${fmtOdd(raw.x)}</div>
-      <div class="m-odd ${getOddClass(raw.a, lo, hi)}" title="Away win">${fmtOdd(raw.a)}</div>
+      <div class="m-odd ${getOddClass(raw.h, lo, hi)}${mH.cls}" title="Home win"${mH.attr}>${mH.el}${fmtOdd(raw.h)}</div>
+      <div class="m-odd ${getOddClass(raw.x, lo, hi)}${mX.cls}" title="Draw"${mX.attr}>${mX.el}${fmtOdd(raw.x)}</div>
+      <div class="m-odd ${getOddClass(raw.a, lo, hi)}${mA.cls}" title="Away win"${mA.attr}>${mA.el}${fmtOdd(raw.a)}</div>
       <div class="m-line">2.5</div>
-      <div class="m-odd ${getOddClass(raw.ov, ouLo, ouHi)}" title="Over 2.5">${fmtOdd(raw.ov)}</div>
-      <div class="m-odd ${getOddClass(raw.un, ouLo, ouHi)}" title="Under 2.5">${fmtOdd(raw.un)}</div>
+      <div class="m-odd ${getOddClass(raw.ov, ouLo, ouHi)}${mOv.cls}" title="Over 2.5"${mOv.attr}>${mOv.el}${fmtOdd(raw.ov)}</div>
+      <div class="m-odd ${getOddClass(raw.un, ouLo, ouHi)}${mUn.cls}" title="Under 2.5"${mUn.attr}>${mUn.el}${fmtOdd(raw.un)}</div>
       <div class="m-more">${esc(more)}</div>
     </div>`;
 }
@@ -1229,6 +1269,7 @@ function renderContent() {
         ${cdHtml}
       </div>
       ${renderRankedList(ms)}`;
+    triggerOddFlash(content);
     return;
   }
 
@@ -1239,6 +1280,18 @@ function renderContent() {
       ${cdHtml}
     </div>
     ${groups.map((g, i) => renderLeagueBlock(g, i)).join('')}`;
+  triggerOddFlash(content);
+}
+
+function triggerOddFlash(container) {
+  if (!pendingFlash) return;
+  pendingFlash = false;
+  requestAnimationFrame(() => {
+    container.querySelectorAll('[data-moved]').forEach(el => {
+      el.classList.add('odd-flash');
+      el.addEventListener('animationend', () => el.classList.remove('odd-flash'), { once: true });
+    });
+  });
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1337,14 +1390,27 @@ async function loadData() {
     allMatches.filter(m => m.valueBets && m.valueBets.length > 0).map(m => `${m.home}|${m.away}|${m.leagueName}`)
   );
 
+  // Snapshot current odds for movement detection
+  prevOddsMap.clear();
+  allMatches.forEach(m => {
+    const matchKey = `${m.home}|${m.away}|${m.leagueName}`;
+    BOOKIES.forEach(bk => {
+      const data = m.bookmakers[bk.key];
+      if (data) prevOddsMap.set(`${matchKey}|${bk.key}`, extractOdds(data.odds));
+    });
+  });
+
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('spinning');
 
-  document.getElementById('content').innerHTML = `
-    <div class="state-center">
-      <div class="spinner"></div>
-      <div class="loading-text">Loading aliases & fetching odds…</div>
-    </div>`;
+  // Only blank the screen on the very first load — subsequent refreshes keep odds visible
+  if (allMatches.length === 0) {
+    document.getElementById('content').innerHTML = `
+      <div class="state-center">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading aliases & fetching odds…</div>
+      </div>`;
+  }
 
   try {
     // Load shared aliases FIRST
@@ -1430,6 +1496,7 @@ async function loadData() {
     selectedLeague = null;
 
     renderSidebar();
+    pendingFlash = true;
     renderContent();
     notifyNewOpportunities(prevArbKeys, prevValueKeys);
 
