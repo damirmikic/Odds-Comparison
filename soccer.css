@@ -227,6 +227,11 @@ input {
   box-shadow: 0 0 5px rgba(245, 158, 11, 0.5);
 }
 
+.bk-dot-cl {
+  background: #A78BFA;
+  box-shadow: 0 0 5px rgba(167, 139, 250, 0.5);
+}
+
 /* Tabs */
 .tabs {
   display: flex;
@@ -1078,6 +1083,12 @@ input {
   background: rgba(245, 158, 11, 0.12);
   color: #F59E0B;
   border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.bk-row-cl .bk-label {
+  background: rgba(167, 139, 250, 0.12);
+  color: #A78BFA;
+  border: 1px solid rgba(167, 139, 250, 0.35);
 }
 
 /* Odds cells in compare mode — slightly smaller */

@@ -7,7 +7,7 @@ const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
    ALIAS DATABASE (Supabase-backed)
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-let _db = { teams: [], leagues: [], groups: [], soccerbetTeams: [], soccerbetLeagues: [] };
+let _db = { teams: [], leagues: [], groups: [], soccerbetTeams: [], soccerbetLeagues: [], cloudbetTeams: [], cloudbetLeagues: [], displayNames: [], mbxSbtTeams: [], mbxSbtLeagues: [], mbxClbTeams: [], mbxClbLeagues: [], sbtClbTeams: [], sbtClbLeagues: [] };
 let _dbLoaded = false;
 
 /**
@@ -17,31 +17,57 @@ async function loadAliasDB() {
     if (_dbLoaded) return;
     try {
         const [
-            { data: teams,          error: tErr  },
-            { data: leagues,        error: lErr  },
-            { data: groups,         error: gErr  },
-            { data: sbtTeams,       error: stErr },
-            { data: sbtLeagues,     error: slErr },
+            { data: teams,       error: tErr  },
+            { data: leagues,     error: lErr  },
+            { data: groups,      error: gErr  },
+            { data: sbtTeams,    error: stErr },
+            { data: sbtLeagues,  error: slErr },
+            { data: clbTeams,    error: ctErr },
+            { data: clbLeagues,  error: clErr },
         ] = await Promise.all([
             supa.from('team_aliases').select('*'),
             supa.from('league_aliases').select('*'),
             supa.from('league_groups').select('*'),
             supa.from('soccerbet_team_aliases').select('*'),
             supa.from('soccerbet_league_aliases').select('*'),
+            supa.from('cloudbet_team_aliases').select('*'),
+            supa.from('cloudbet_league_aliases').select('*'),
         ]);
 
-        if (tErr)  throw tErr;
-        if (lErr)  throw lErr;
-        if (gErr)  throw gErr;
-        if (stErr) throw stErr;
-        if (slErr) throw slErr;
+        if (tErr)   throw tErr;
+        if (lErr)   throw lErr;
+        if (gErr)   throw gErr;
+        if (stErr)  throw stErr;
+        if (slErr)  throw slErr;
+        if (ctErr)  throw ctErr;
+        if (clErr)  throw clErr;
 
-        _db.teams           = teams       || [];
-        _db.leagues         = leagues     || [];
-        _db.groups          = groups      || [];
+        _db.teams            = teams      || [];
+        _db.leagues          = leagues    || [];
+        _db.groups           = groups     || [];
         _db.soccerbetTeams   = sbtTeams   || [];
         _db.soccerbetLeagues = sbtLeagues || [];
+        _db.cloudbetTeams    = clbTeams   || [];
+        _db.cloudbetLeagues  = clbLeagues || [];
         _dbLoaded = true;
+
+        // Load display names separately — table may not exist yet
+        const { data: displayNames, error: dnErr } = await supa.from('league_display_names').select('*');
+        if (dnErr) console.warn('[aliases] league_display_names not available:', dnErr.message);
+        else _db.displayNames = displayNames || [];
+
+        // Load cross-bookie tables separately — may not exist until manually created
+        const crossNames = [
+            'maxbet_soccerbet_team_aliases', 'maxbet_soccerbet_league_aliases',
+            'maxbet_cloudbet_team_aliases',  'maxbet_cloudbet_league_aliases',
+            'soccerbet_cloudbet_team_aliases', 'soccerbet_cloudbet_league_aliases',
+        ];
+        const crossKeys = ['mbxSbtTeams', 'mbxSbtLeagues', 'mbxClbTeams', 'mbxClbLeagues', 'sbtClbTeams', 'sbtClbLeagues'];
+        const crossResults = await Promise.all(crossNames.map(t => supa.from(t).select('*')));
+        crossResults.forEach(({ data, error }, i) => {
+            if (error) console.warn(`[aliases] ${crossNames[i]} not available:`, error.message);
+            else _db[crossKeys[i]] = data || [];
+        });
     } catch (e) {
         console.error('[aliases] Supabase load error:', e.message);
     }
@@ -53,6 +79,15 @@ function getLeagueAliases()          { return [..._db.leagues]; }
 function getLeagueGroups()           { return [..._db.groups]; }
 function getSoccerbetTeamAliases()   { return [..._db.soccerbetTeams]; }
 function getSoccerbetLeagueAliases() { return [..._db.soccerbetLeagues]; }
+function getCloudbetTeamAliases()    { return [..._db.cloudbetTeams]; }
+function getCloudbetLeagueAliases()  { return [..._db.cloudbetLeagues]; }
+function getLeagueDisplayNames()     { return [..._db.displayNames]; }
+function getMaxbetSbtTeamAliases()   { return [..._db.mbxSbtTeams]; }
+function getMaxbetSbtLeagueAliases() { return [..._db.mbxSbtLeagues]; }
+function getMaxbetClbTeamAliases()   { return [..._db.mbxClbTeams]; }
+function getMaxbetClbLeagueAliases() { return [..._db.mbxClbLeagues]; }
+function getSbtClbTeamAliases()      { return [..._db.sbtClbTeams]; }
+function getSbtClbLeagueAliases()    { return [..._db.sbtClbLeagues]; }
 
 /* ── Mutators (Async Supabase calls) ───────────────────────── */
 
@@ -144,6 +179,31 @@ async function removeLeagueAlias(merkurLeague, maxbetLeague) {
     );
 }
 
+/* ── League Display Name Mutators ──────────────────────────── */
+
+async function setLeagueDisplayName(merkurName, displayName) {
+    const { data, error } = await supa
+        .from('league_display_names')
+        .upsert([{ merkur_name: merkurName, display_name: displayName }], { onConflict: 'merkur_name' })
+        .select();
+
+    if (error) throw error;
+
+    const idx = _db.displayNames.findIndex(d => d.merkur_name === merkurName);
+    if (idx !== -1) _db.displayNames[idx] = data[0];
+    else _db.displayNames.push(data[0]);
+}
+
+async function removeLeagueDisplayName(merkurName) {
+    const { error } = await supa
+        .from('league_display_names')
+        .delete()
+        .match({ merkur_name: merkurName });
+
+    if (error) throw error;
+    _db.displayNames = _db.displayNames.filter(d => d.merkur_name !== merkurName);
+}
+
 /* ── SoccerBet Mutators ────────────────────────────────────── */
 
 async function addSoccerbetTeamAlias(merkurName, soccerbetName) {
@@ -192,6 +252,136 @@ async function removeSoccerbetLeagueAlias(merkurLeague, soccerbetLeague) {
     _db.soccerbetLeagues = _db.soccerbetLeagues.filter(
         a => !(a.merkur === merkurLeague && a.soccerbet === soccerbetLeague)
     );
+}
+
+/* ── Cloudbet Mutators ─────────────────────────────────────── */
+
+async function addCloudbetTeamAlias(merkurName, cloudbetName) {
+    if (_db.cloudbetTeams.some(a => a.merkur === merkurName && a.cloudbet === cloudbetName)) return;
+
+    const { data, error } = await supa
+        .from('cloudbet_team_aliases')
+        .insert([{ merkur: merkurName, cloudbet: cloudbetName }])
+        .select();
+
+    if (error) { console.error('[aliases] Add cloudbet team error:', error.message); throw error; }
+    _db.cloudbetTeams.push(data[0]);
+}
+
+async function removeCloudbetTeamAlias(merkurName, cloudbetName) {
+    const { error } = await supa
+        .from('cloudbet_team_aliases')
+        .delete()
+        .match({ merkur: merkurName, cloudbet: cloudbetName });
+
+    if (error) { console.error('[aliases] Remove cloudbet team error:', error.message); throw error; }
+    _db.cloudbetTeams = _db.cloudbetTeams.filter(
+        a => !(a.merkur === merkurName && a.cloudbet === cloudbetName)
+    );
+}
+
+async function addCloudbetLeagueAlias(merkurLeague, cloudbetLeague) {
+    if (_db.cloudbetLeagues.some(a => a.merkur === merkurLeague && a.cloudbet === cloudbetLeague)) return;
+
+    const { data, error } = await supa
+        .from('cloudbet_league_aliases')
+        .insert([{ merkur: merkurLeague, cloudbet: cloudbetLeague }])
+        .select();
+
+    if (error) { console.error('[aliases] Add cloudbet league error:', error.message); throw error; }
+    _db.cloudbetLeagues.push(data[0]);
+}
+
+async function removeCloudbetLeagueAlias(merkurLeague, cloudbetLeague) {
+    const { error } = await supa
+        .from('cloudbet_league_aliases')
+        .delete()
+        .match({ merkur: merkurLeague, cloudbet: cloudbetLeague });
+
+    if (error) { console.error('[aliases] Remove cloudbet league error:', error.message); throw error; }
+    _db.cloudbetLeagues = _db.cloudbetLeagues.filter(
+        a => !(a.merkur === merkurLeague && a.cloudbet === cloudbetLeague)
+    );
+}
+
+/* ── Cross-bookie Mutators (MaxBet↔SoccerBet, MaxBet↔Cloudbet, SoccerBet↔Cloudbet) ── */
+
+async function addMaxbetSbtTeamAlias(maxbetName, sbtName) {
+    if (_db.mbxSbtTeams.some(a => a.maxbet === maxbetName && a.soccerbet === sbtName)) return;
+    const { data, error } = await supa.from('maxbet_soccerbet_team_aliases').insert([{ maxbet: maxbetName, soccerbet: sbtName }]).select();
+    if (error) { console.error('[aliases] Add mbx-sbt team error:', error.message); throw error; }
+    _db.mbxSbtTeams.push(data[0]);
+}
+
+async function removeMaxbetSbtTeamAlias(maxbetName, sbtName) {
+    const { error } = await supa.from('maxbet_soccerbet_team_aliases').delete().match({ maxbet: maxbetName, soccerbet: sbtName });
+    if (error) { console.error('[aliases] Remove mbx-sbt team error:', error.message); throw error; }
+    _db.mbxSbtTeams = _db.mbxSbtTeams.filter(a => !(a.maxbet === maxbetName && a.soccerbet === sbtName));
+}
+
+async function addMaxbetSbtLeagueAlias(maxbetLeague, sbtLeague) {
+    if (_db.mbxSbtLeagues.some(a => a.maxbet === maxbetLeague && a.soccerbet === sbtLeague)) return;
+    const { data, error } = await supa.from('maxbet_soccerbet_league_aliases').insert([{ maxbet: maxbetLeague, soccerbet: sbtLeague }]).select();
+    if (error) { console.error('[aliases] Add mbx-sbt league error:', error.message); throw error; }
+    _db.mbxSbtLeagues.push(data[0]);
+}
+
+async function removeMaxbetSbtLeagueAlias(maxbetLeague, sbtLeague) {
+    const { error } = await supa.from('maxbet_soccerbet_league_aliases').delete().match({ maxbet: maxbetLeague, soccerbet: sbtLeague });
+    if (error) { console.error('[aliases] Remove mbx-sbt league error:', error.message); throw error; }
+    _db.mbxSbtLeagues = _db.mbxSbtLeagues.filter(a => !(a.maxbet === maxbetLeague && a.soccerbet === sbtLeague));
+}
+
+async function addMaxbetClbTeamAlias(maxbetName, clbName) {
+    if (_db.mbxClbTeams.some(a => a.maxbet === maxbetName && a.cloudbet === clbName)) return;
+    const { data, error } = await supa.from('maxbet_cloudbet_team_aliases').insert([{ maxbet: maxbetName, cloudbet: clbName }]).select();
+    if (error) { console.error('[aliases] Add mbx-clb team error:', error.message); throw error; }
+    _db.mbxClbTeams.push(data[0]);
+}
+
+async function removeMaxbetClbTeamAlias(maxbetName, clbName) {
+    const { error } = await supa.from('maxbet_cloudbet_team_aliases').delete().match({ maxbet: maxbetName, cloudbet: clbName });
+    if (error) { console.error('[aliases] Remove mbx-clb team error:', error.message); throw error; }
+    _db.mbxClbTeams = _db.mbxClbTeams.filter(a => !(a.maxbet === maxbetName && a.cloudbet === clbName));
+}
+
+async function addMaxbetClbLeagueAlias(maxbetLeague, clbLeague) {
+    if (_db.mbxClbLeagues.some(a => a.maxbet === maxbetLeague && a.cloudbet === clbLeague)) return;
+    const { data, error } = await supa.from('maxbet_cloudbet_league_aliases').insert([{ maxbet: maxbetLeague, cloudbet: clbLeague }]).select();
+    if (error) { console.error('[aliases] Add mbx-clb league error:', error.message); throw error; }
+    _db.mbxClbLeagues.push(data[0]);
+}
+
+async function removeMaxbetClbLeagueAlias(maxbetLeague, clbLeague) {
+    const { error } = await supa.from('maxbet_cloudbet_league_aliases').delete().match({ maxbet: maxbetLeague, cloudbet: clbLeague });
+    if (error) { console.error('[aliases] Remove mbx-clb league error:', error.message); throw error; }
+    _db.mbxClbLeagues = _db.mbxClbLeagues.filter(a => !(a.maxbet === maxbetLeague && a.cloudbet === clbLeague));
+}
+
+async function addSbtClbTeamAlias(sbtName, clbName) {
+    if (_db.sbtClbTeams.some(a => a.soccerbet === sbtName && a.cloudbet === clbName)) return;
+    const { data, error } = await supa.from('soccerbet_cloudbet_team_aliases').insert([{ soccerbet: sbtName, cloudbet: clbName }]).select();
+    if (error) { console.error('[aliases] Add sbt-clb team error:', error.message); throw error; }
+    _db.sbtClbTeams.push(data[0]);
+}
+
+async function removeSbtClbTeamAlias(sbtName, clbName) {
+    const { error } = await supa.from('soccerbet_cloudbet_team_aliases').delete().match({ soccerbet: sbtName, cloudbet: clbName });
+    if (error) { console.error('[aliases] Remove sbt-clb team error:', error.message); throw error; }
+    _db.sbtClbTeams = _db.sbtClbTeams.filter(a => !(a.soccerbet === sbtName && a.cloudbet === clbName));
+}
+
+async function addSbtClbLeagueAlias(sbtLeague, clbLeague) {
+    if (_db.sbtClbLeagues.some(a => a.soccerbet === sbtLeague && a.cloudbet === clbLeague)) return;
+    const { data, error } = await supa.from('soccerbet_cloudbet_league_aliases').insert([{ soccerbet: sbtLeague, cloudbet: clbLeague }]).select();
+    if (error) { console.error('[aliases] Add sbt-clb league error:', error.message); throw error; }
+    _db.sbtClbLeagues.push(data[0]);
+}
+
+async function removeSbtClbLeagueAlias(sbtLeague, clbLeague) {
+    const { error } = await supa.from('soccerbet_cloudbet_league_aliases').delete().match({ soccerbet: sbtLeague, cloudbet: clbLeague });
+    if (error) { console.error('[aliases] Remove sbt-clb league error:', error.message); throw error; }
+    _db.sbtClbLeagues = _db.sbtClbLeagues.filter(a => !(a.soccerbet === sbtLeague && a.cloudbet === clbLeague));
 }
 
 /* ── Export / Import (Legacy support & migration) ─────────── */
@@ -279,6 +469,88 @@ function buildSoccerbetLeagueAliasMap(normFn) {
         const s = normFn(a.soccerbet);
         if (!map.has(m)) map.set(m, new Set());
         map.get(m).add(s);
+    });
+    return map;
+}
+
+function buildCloudbetTeamAliasMap(normFn) {
+    const map = new Map(); // Map<normMerkur, Set<normCloudbet>>
+    _db.cloudbetTeams.forEach(a => {
+        const m = normFn(a.merkur);
+        const c = normFn(a.cloudbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(c);
+    });
+    return map;
+}
+
+function buildCloudbetLeagueAliasMap(normFn) {
+    const map = new Map(); // Map<normMerkur, Set<normCloudbet>>
+    _db.cloudbetLeagues.forEach(a => {
+        const m = normFn(a.merkur);
+        const c = normFn(a.cloudbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(c);
+    });
+    return map;
+}
+
+function buildMaxbetSbtTeamAliasMap(normFn) {
+    const map = new Map(); // Map<normMaxbet, Set<normSbt>>
+    _db.mbxSbtTeams.forEach(a => {
+        const m = normFn(a.maxbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(normFn(a.soccerbet));
+    });
+    return map;
+}
+
+function buildMaxbetSbtLeagueAliasMap(normFn) {
+    const map = new Map(); // Map<normMaxbet, Set<normSbt>>
+    _db.mbxSbtLeagues.forEach(a => {
+        const m = normFn(a.maxbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(normFn(a.soccerbet));
+    });
+    return map;
+}
+
+function buildMaxbetClbTeamAliasMap(normFn) {
+    const map = new Map(); // Map<normMaxbet, Set<normCloudbet>>
+    _db.mbxClbTeams.forEach(a => {
+        const m = normFn(a.maxbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(normFn(a.cloudbet));
+    });
+    return map;
+}
+
+function buildMaxbetClbLeagueAliasMap(normFn) {
+    const map = new Map(); // Map<normMaxbet, Set<normCloudbet>>
+    _db.mbxClbLeagues.forEach(a => {
+        const m = normFn(a.maxbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(normFn(a.cloudbet));
+    });
+    return map;
+}
+
+function buildSbtClbTeamAliasMap(normFn) {
+    const map = new Map(); // Map<normSbt, Set<normCloudbet>>
+    _db.sbtClbTeams.forEach(a => {
+        const m = normFn(a.soccerbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(normFn(a.cloudbet));
+    });
+    return map;
+}
+
+function buildSbtClbLeagueAliasMap(normFn) {
+    const map = new Map(); // Map<normSbt, Set<normCloudbet>>
+    _db.sbtClbLeagues.forEach(a => {
+        const m = normFn(a.soccerbet);
+        if (!map.has(m)) map.set(m, new Set());
+        map.get(m).add(normFn(a.cloudbet));
     });
     return map;
 }

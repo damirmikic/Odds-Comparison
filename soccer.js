@@ -1,11 +1,52 @@
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    CONFIG
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-const APIS = {
-  merkur: 'https://www.merkurxtip.rs/restapi/offer/en/init',
-  maxbet: 'https://www.maxbet.rs/restapi/offer/en/init',
-  soccerbet: 'https://www.soccerbet.rs/restapi/offer/en/init',
-};
+const BOOKIES = [
+  {
+    key: 'merkur',  label: 'MRK', cls: 'm',
+    url: 'https://www.merkurxtip.rs/restapi/offer/en/init',
+    parse: data => parseMatches(data),
+    getTeamAliasMap:   () => new Map(),
+    getLeagueAliasMap: () => new Map(),
+    rawLeagueAliases:  () => [],
+  },
+  {
+    key: 'maxbet',  label: 'MAX', cls: 'b',
+    url: 'https://www.maxbet.rs/restapi/offer/en/init',
+    parse: data => parseMatches(data).filter(m => !isMaxbetBonus(m)),
+    getTeamAliasMap:   () => buildTeamAliasMap(normTeam),
+    getLeagueAliasMap: () => buildLeagueAliasMap(normLeague),
+    rawLeagueAliases:  () => getLeagueAliases(),
+  },
+  {
+    key: 'soccerbet', label: 'SBT', cls: 's',
+    url: 'https://www.soccerbet.rs/restapi/offer/en/init',
+    parse: data => parseSoccerbetMatches(data),
+    getTeamAliasMap:   () => buildSoccerbetTeamAliasMap(normTeam),
+    getLeagueAliasMap: () => buildSoccerbetLeagueAliasMap(normLeague),
+    rawLeagueAliases:  () => getSoccerbetLeagueAliases(),
+    getCrossAliasMaps: () => ({
+      maxbet: { team: buildMaxbetSbtTeamAliasMap(normTeam), league: buildMaxbetSbtLeagueAliasMap(normLeague) },
+    }),
+  },
+  {
+    key: 'cloudbet', label: 'CLB', cls: 'cl',
+    url: () => {
+      const now = Math.floor(Date.now() / 1000);
+      const to  = now + 7 * 24 * 3600;
+      return `https://sports-api.cloudbet.com/pub/v2/odds/events?sport=soccer&live=false&from=${now}&to=${to}&markets=soccer.match_odds&markets=soccer.total_goals&players=false&limit=2000`;
+    },
+    headers: { 'X-API-Key': 'eyJhbGciOiJSUzI1NiIsImtpZCI6IkhKcDkyNnF3ZXBjNnF3LU9rMk4zV05pXzBrRFd6cEdwTzAxNlRJUjdRWDAiLCJ0eXAiOiJKV1QifQ.eyJhY2Nlc3NfdGllciI6InRyYWRpbmciLCJleHAiOjIwNjE1Mzc1MDIsImlhdCI6MTc0NjE3NzUwMiwianRpIjoiNTU1ODk0NjgtZjJhZi00ZGQ3LWE3MTQtZjNiNjgyMWU4OGRkIiwic3ViIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3IiwidGVuYW50IjoiY2xvdWRiZXQiLCJ1dWlkIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3In0.BW_nXSwTkxTI7C-1UzgxWLnNzo9Bo1Ed8hI9RfVLnrJa6sfsMyvQ1NrtT5t6i_emwhkRHU1hY-9i6c2c5AI4fc2mRLSNBujvrfbVHX67uB58E8TeSOZUBRi0eqfLBL7sYl1JNPZzhFkDBCBNFJZJpn40FIjIrtIiPd-G5ClaaSMRWrFUDiwA1NmyxHSfkfRpeRSnfk15qck7zSIeNeITzPbD7kZGDIeStmcHuiHfcQX3NaHaI0gyw60wmDgan83NpYQYRVLQ9C4icbNhel4n5H5FGFAxQS8IcvynqV8f-vz2t4BRGuYXBU8uhdYKgezhyQrSvX6NpwNPBJC8CWo2fA' },
+    parse: data => parseCloudbetMatches(data),
+    getTeamAliasMap:   () => buildCloudbetTeamAliasMap(normTeam),
+    getLeagueAliasMap: () => buildCloudbetLeagueAliasMap(normLeague),
+    rawLeagueAliases:  () => getCloudbetLeagueAliases(),
+    getCrossAliasMaps: () => ({
+      maxbet:    { team: buildMaxbetClbTeamAliasMap(normTeam),  league: buildMaxbetClbLeagueAliasMap(normLeague) },
+      soccerbet: { team: buildSbtClbTeamAliasMap(normTeam),     league: buildSbtClbLeagueAliasMap(normLeague) },
+    }),
+  },
+];
 
 const FLAGS = {
   'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Wales': '🏴󠁧󠁢󠁷󠁬󠁳󠁿',
@@ -227,9 +268,21 @@ function parseMatches(data) {
  *  1/2/3  → Home / Draw / Away
  *  22/24  → Under / Over (2.5 goals)
  */
+function isSbtOutright(m) {
+  const league = (m.leagueName || '').toLowerCase();
+  const home   = (m.home || '').toLowerCase();
+  const away   = (m.away || '').toLowerCase();
+  return league.includes('pobednik') || /\d{4}\/\d{2}/.test(league)
+      || home.includes('pobednik')   || away.includes('pobednik');
+}
+
+function isMaxbetBonus(m) {
+  return (m.leagueName || '').toLowerCase().includes('bonus');
+}
+
 function parseSoccerbetMatches(data) {
   return (data.esMatches || [])
-    .filter(m => m.sport === 'S')
+    .filter(m => m.sport === 'S' && !isSbtOutright(m))
     .map(m => {
       const odds = {};
       const betMap = m.betMap || {};
@@ -249,33 +302,94 @@ function parseSoccerbetMatches(data) {
 }
 
 /**
- * Merge two lists of matches using 3-pass fuzzy matching.
+ * Parse Cloudbet API response (competitions[].events[]).
+ * Maps soccer.match_odds → odds['1'/'2'/'3'] and
+ * soccer.total_goals (total=2.5) → odds['24'/'22'].
+ * Only includes SELECTION_ENABLED outcomes; prices are already decimal.
  *
- * Pass 1 — Exact normalized key (home|away), kickoff ±45 min
- * Pass 2 — Fuzzy home+away (substring / token Jaccard ≥ 0.5), kickoff ±45 min
- * Pass 3 — Fuzzy home only OR away only match (one side exact, other fuzzy), kickoff ±30 min
- *
- * matchQuality: 'exact' | 'fuzzy' | 'partial'
+ * League names are built from comp.key ("soccer-england-premier-league")
+ * by matching the country slug against FLAGS, yielding "England: Premier League".
+ * Competitions whose key has no recognized country fall back to comp.name.
  */
+function parseCloudbetMatches(data) {
+  // Build slug → display name from FLAGS, sorted longest-first so multi-word
+  // countries ("south-korea") match before single-word prefixes ("south").
+  const countryBySlug = Object.keys(FLAGS)
+    .filter(n => n !== 'Other')
+    .map(n => [n.toLowerCase().replace(/\s+/g, '-'), n])
+    .sort((a, b) => b[0].length - a[0].length);
+
+  function resolveLeagueName(comp) {
+    const rest = comp.key.replace(/^soccer-/, '');
+    for (const [slug, country] of countryBySlug) {
+      if (rest === slug || rest.startsWith(slug + '-')) {
+        return `${country}: ${comp.name}`;
+      }
+    }
+    return comp.name; // international / regional competitions
+  }
+
+  const matches = [];
+  for (const comp of (data.competitions || [])) {
+    const leagueName = resolveLeagueName(comp);
+    for (const event of (comp.events || [])) {
+      if (event.type !== 'EVENT_TYPE_EVENT') continue;
+      if (!['TRADING', 'TRADING_LIVE'].includes(event.status)) continue;
+
+      const markets = event.markets || {};
+      const odds = {};
+
+      // 1X2
+      const ftMatch = markets['soccer.match_odds']?.submarkets?.['period=ft'];
+      if (ftMatch) {
+        for (const sel of (ftMatch.selections || [])) {
+          if (sel.status !== 'SELECTION_ENABLED') continue;
+          if (sel.outcome === 'home') odds['1'] = sel.price;
+          if (sel.outcome === 'draw') odds['2'] = sel.price;
+          if (sel.outcome === 'away') odds['3'] = sel.price;
+        }
+      }
+
+      // Over/Under 2.5
+      const ftGoals = markets['soccer.total_goals']?.submarkets?.['period=ft'];
+      if (ftGoals) {
+        for (const sel of (ftGoals.selections || [])) {
+          if (sel.status !== 'SELECTION_ENABLED' || sel.params !== 'total=2.5') continue;
+          if (sel.outcome === 'over')  odds['24'] = sel.price;
+          if (sel.outcome === 'under') odds['22'] = sel.price;
+        }
+      }
+
+      matches.push({
+        home: event.home.name,
+        away: event.away.name,
+        leagueName,
+        kickOffTime: new Date(event.cutoffTime).getTime(),
+        live: event.status === 'TRADING_LIVE',
+        odds,
+        oddsCount: Object.keys(markets).length,
+      });
+    }
+  }
+  return matches;
+}
+
 /**
- * Merge two lists of matches using 4-pass fuzzy matching.
+ * Merge merkur (canonical) and maxbet lists using 4-pass fuzzy matching.
+ * teamAliasMap / leagueAliasMap come from BOOKIES[1] config.
  *
- * Pass 0 — Alias Match (from aliases.json)
+ * Pass 0 — Alias match (from Supabase alias DB)
  * Pass 1 — Exact normalized key (home|away), kickoff ±45 min
  * Pass 2 — Fuzzy home+away (substring / token Jaccard ≥ 0.5), kickoff ±45 min
  * Pass 3 — Fuzzy home only OR away only match (one side exact, other fuzzy), kickoff ±30 min
  *
- * matchQuality: 'exact' | 'fuzzy' | 'partial' | 'alias'
+ * matchQuality: 'alias' | 'exact' | 'fuzzy' | 'partial'
  */
-function mergeMatches(merkurList, maxbetList) {
+function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
   const merged = [];
   const usedMb = new Set();
   const TIME_WIN = 45 * 60 * 1000; // ±45 min
   const TIME_STRICT = 30 * 60 * 1000; // ±30 min for partial
-
-  // Build alias maps for Pass 0
-  const teamAliasMap = buildTeamAliasMap(normTeam);
-  const leagueAliasMap = buildLeagueAliasMap(normLeague);
 
   // Pre-compute normalized names for maxbet (avoid re-computing in loops)
   const mbNorm = maxbetList.map(m => ({
@@ -405,8 +519,10 @@ function mergeMatches(merkurList, maxbetList) {
         leagueName: bestLg,
         kickOffTime: mk.kickOffTime,
         live: mk.live || mb.live,
-        merkur: { odds: mk.odds, oddsCount: mk.oddsCount },
-        maxbet: { odds: mb.odds, oddsCount: mb.oddsCount },
+        bookmakers: {
+          merkur: { odds: mk.odds, oddsCount: mk.oddsCount },
+          maxbet: { odds: mb.odds, oddsCount: mb.oddsCount },
+        },
         matched: true,
         matchQuality: quality,
       });
@@ -417,8 +533,10 @@ function mergeMatches(merkurList, maxbetList) {
         leagueName: mk.leagueName,
         kickOffTime: mk.kickOffTime,
         live: mk.live,
-        merkur: { odds: mk.odds, oddsCount: mk.oddsCount },
-        maxbet: null,
+        bookmakers: {
+          merkur: { odds: mk.odds, oddsCount: mk.oddsCount },
+          maxbet: null,
+        },
         matched: false,
         matchQuality: null,
       });
@@ -434,8 +552,10 @@ function mergeMatches(merkurList, maxbetList) {
         leagueName: mb.leagueName,
         kickOffTime: mb.kickOffTime,
         live: mb.live,
-        merkur: null,
-        maxbet: { odds: mb.odds, oddsCount: mb.oddsCount },
+        bookmakers: {
+          merkur: null,
+          maxbet: { odds: mb.odds, oddsCount: mb.oddsCount },
+        },
         matched: false,
         matchQuality: null,
       });
@@ -446,21 +566,17 @@ function mergeMatches(merkurList, maxbetList) {
 }
 
 /**
- * Match SoccerBet matches against the already-merged list (merkur+maxbet).
- * Uses the same 3-pass fuzzy logic (exact → fuzzy → partial).
- * Adds `soccerbet: { odds, oddsCount }` to each merged match, or null if unmatched.
- * Appends soccerbet-only matches at the end.
+ * Merge an additional bookmaker's matches into the already-merged list.
+ * Uses the same 4-pass fuzzy logic (alias → exact → fuzzy → partial).
+ * Sets m.bookmakers[bookieKey] = { odds, oddsCount } on each matched entry,
+ * null on unmatched. Appends bookmaker-only matches at the end.
  */
-function matchSoccerbet(mergedList, sbList) {
-  const usedSb = new Set();
+function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAliasMap, crossAliasMaps = {}) {
+  const used = new Set();
   const TIME_WIN = 45 * 60 * 1000;
   const TIME_STRICT = 30 * 60 * 1000;
 
-  // Build soccerbet alias maps for Pass 0
-  const teamAliasMap   = buildSoccerbetTeamAliasMap(normTeam);
-  const leagueAliasMap = buildSoccerbetLeagueAliasMap(normLeague);
-
-  const sbNorm = sbList.map(m => ({
+  const newNorm = newList.map(m => ({
     home:   normTeam(m.home),
     away:   normTeam(m.away),
     league: normLeague(m.leagueName),
@@ -468,8 +584,8 @@ function matchSoccerbet(mergedList, sbList) {
 
   // Build exact index keyed by norm home|away
   const exactIndex = {};
-  sbList.forEach((m, i) => {
-    const key = `${sbNorm[i].home}|${sbNorm[i].away}`;
+  newList.forEach((m, i) => {
+    const key = `${newNorm[i].home}|${newNorm[i].away}`;
     if (!exactIndex[key]) exactIndex[key] = [];
     exactIndex[key].push(i);
   });
@@ -479,26 +595,40 @@ function matchSoccerbet(mergedList, sbList) {
     const mkH = normTeam(mk.home);
     const mkA = normTeam(mk.away);
     const mkL = normLeague(mk.leagueName);
-    const targetHs = teamAliasMap.get(mkH);
-    const targetAs = teamAliasMap.get(mkA);
+
+    // When merkur is absent, check cross-bookie maps for the first other present bookie
+    let activeTeamMap   = teamAliasMap;
+    let activeLeagueMap = leagueAliasMap;
+    if (!mk.bookmakers.merkur) {
+      for (const [bk, maps] of Object.entries(crossAliasMaps)) {
+        if (mk.bookmakers[bk] !== null) {
+          activeTeamMap   = maps.team;
+          activeLeagueMap = maps.league;
+          break;
+        }
+      }
+    }
+
+    const targetHs = activeTeamMap.get(mkH);
+    const targetAs = activeTeamMap.get(mkA);
     if (!targetHs && !targetAs) return -1;
 
     // With league signal first
-    for (let i = 0; i < sbList.length; i++) {
-      if (usedSb.has(i)) continue;
-      if (Math.abs(sbList[i].kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
-      const homeMatch = targetHs ? targetHs.has(sbNorm[i].home) : (mkH === sbNorm[i].home);
-      const awayMatch = targetAs ? targetAs.has(sbNorm[i].away) : (mkA === sbNorm[i].away);
-      const targetLs  = leagueAliasMap.get(mkL);
-      const leagueMatch = (targetLs && targetLs.has(sbNorm[i].league)) || (mkL === sbNorm[i].league);
+    for (let i = 0; i < newList.length; i++) {
+      if (used.has(i)) continue;
+      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
+      const homeMatch = targetHs ? targetHs.has(newNorm[i].home) : (mkH === newNorm[i].home);
+      const awayMatch = targetAs ? targetAs.has(newNorm[i].away) : (mkA === newNorm[i].away);
+      const targetLs  = activeLeagueMap.get(mkL);
+      const leagueMatch = (targetLs && targetLs.has(newNorm[i].league)) || (mkL === newNorm[i].league);
       if (homeMatch && awayMatch && leagueMatch) return i;
     }
     // Fallback: without league signal
-    for (let i = 0; i < sbList.length; i++) {
-      if (usedSb.has(i)) continue;
-      if (Math.abs(sbList[i].kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
-      const homeMatch = targetHs ? targetHs.has(sbNorm[i].home) : (mkH === sbNorm[i].home);
-      const awayMatch = targetAs ? targetAs.has(sbNorm[i].away) : (mkA === sbNorm[i].away);
+    for (let i = 0; i < newList.length; i++) {
+      if (used.has(i)) continue;
+      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
+      const homeMatch = targetHs ? targetHs.has(newNorm[i].home) : (mkH === newNorm[i].home);
+      const awayMatch = targetAs ? targetAs.has(newNorm[i].away) : (mkA === newNorm[i].away);
       if (homeMatch && awayMatch) return i;
     }
     return -1;
@@ -508,8 +638,8 @@ function matchSoccerbet(mergedList, sbList) {
   function findExact(mk) {
     const key = `${normTeam(mk.home)}|${normTeam(mk.away)}`;
     for (const idx of (exactIndex[key] || [])) {
-      if (usedSb.has(idx)) continue;
-      if (Math.abs(sbList[idx].kickOffTime - mk.kickOffTime) <= TIME_WIN) return idx;
+      if (used.has(idx)) continue;
+      if (Math.abs(newList[idx].kickOffTime - mk.kickOffTime) <= TIME_WIN) return idx;
     }
     return -1;
   }
@@ -519,11 +649,11 @@ function matchSoccerbet(mergedList, sbList) {
     const mkH = normTeam(mk.home);
     const mkA = normTeam(mk.away);
     let bestIdx = -1, bestScore = 0;
-    sbList.forEach((sb, i) => {
-      if (usedSb.has(i)) return;
-      if (Math.abs(sb.kickOffTime - mk.kickOffTime) > TIME_WIN) return;
-      if (fuzzyTeamMatch(mkH, sbNorm[i].home) && fuzzyTeamMatch(mkA, sbNorm[i].away)) {
-        const score = 1 - Math.abs(sb.kickOffTime - mk.kickOffTime) / TIME_WIN;
+    newList.forEach((entry, i) => {
+      if (used.has(i)) return;
+      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > TIME_WIN) return;
+      if (fuzzyTeamMatch(mkH, newNorm[i].home) && fuzzyTeamMatch(mkA, newNorm[i].away)) {
+        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / TIME_WIN;
         if (score > bestScore) { bestScore = score; bestIdx = i; }
       }
     });
@@ -535,15 +665,15 @@ function matchSoccerbet(mergedList, sbList) {
     const mkH = normTeam(mk.home);
     const mkA = normTeam(mk.away);
     let bestIdx = -1, bestScore = 0;
-    sbList.forEach((sb, i) => {
-      if (usedSb.has(i)) return;
-      if (Math.abs(sb.kickOffTime - mk.kickOffTime) > TIME_STRICT) return;
-      const homeExact = mkH === sbNorm[i].home;
-      const awayExact = mkA === sbNorm[i].away;
-      const homeFuzz = fuzzyTeamMatch(mkH, sbNorm[i].home);
-      const awayFuzz = fuzzyTeamMatch(mkA, sbNorm[i].away);
+    newList.forEach((entry, i) => {
+      if (used.has(i)) return;
+      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > TIME_STRICT) return;
+      const homeExact = mkH === newNorm[i].home;
+      const awayExact = mkA === newNorm[i].away;
+      const homeFuzz = fuzzyTeamMatch(mkH, newNorm[i].home);
+      const awayFuzz = fuzzyTeamMatch(mkA, newNorm[i].away);
       if ((homeExact && awayFuzz) || (awayExact && homeFuzz)) {
-        const score = 1 - Math.abs(sb.kickOffTime - mk.kickOffTime) / TIME_STRICT;
+        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / TIME_STRICT;
         if (score > bestScore) { bestScore = score; bestIdx = i; }
       }
     });
@@ -557,25 +687,24 @@ function matchSoccerbet(mergedList, sbList) {
     if (idx === -1) idx = findPartial(mk);
 
     if (idx !== -1) {
-      usedSb.add(idx);
-      const sb = sbList[idx];
-      return { ...mk, soccerbet: { odds: sb.odds, oddsCount: sb.oddsCount } };
+      used.add(idx);
+      const entry = newList[idx];
+      return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount } } };
     }
-    return { ...mk, soccerbet: null };
+    return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: null } };
   });
 
-  // Append soccerbet-only matches
-  sbList.forEach((sb, i) => {
-    if (!usedSb.has(i)) {
+  // Append bookmaker-only matches
+  const emptyBks = Object.fromEntries(BOOKIES.map(b => [b.key, null]));
+  newList.forEach((entry, i) => {
+    if (!used.has(i)) {
       result.push({
-        home: sb.home,
-        away: sb.away,
-        leagueName: sb.leagueName,
-        kickOffTime: sb.kickOffTime,
-        live: sb.live,
-        merkur: null,
-        maxbet: null,
-        soccerbet: { odds: sb.odds, oddsCount: sb.oddsCount },
+        home: entry.home,
+        away: entry.away,
+        leagueName: entry.leagueName,
+        kickOffTime: entry.kickOffTime,
+        live: entry.live,
+        bookmakers: { ...emptyBks, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount } },
         matched: false,
         matchQuality: null,
       });
@@ -592,9 +721,7 @@ function getFilteredMatches() {
   let ms = allMatches;
 
   // View mode filter
-  if (viewMode === 'merkur') ms = ms.filter(m => m.merkur !== null);
-  if (viewMode === 'maxbet') ms = ms.filter(m => m.maxbet !== null);
-  if (viewMode === 'soccerbet') ms = ms.filter(m => m.soccerbet !== null);
+  if (viewMode !== 'compare') ms = ms.filter(m => m.bookmakers[viewMode] !== null);
 
   // Tab filter
   if (activeFilter === 'live') ms = ms.filter(m => m.live);
@@ -778,27 +905,20 @@ function renderMatch(m) {
   if (viewMode === 'compare') {
     return renderMatchCompare(m, isLive, timeStr);
   } else {
-    const src = viewMode === 'merkur' ? m.merkur
-              : viewMode === 'maxbet' ? m.maxbet
-              : m.soccerbet;
-    return renderMatchSingle(m, src, isLive, timeStr);
+    return renderMatchSingle(m, m.bookmakers[viewMode], isLive, timeStr);
   }
 }
 
 function renderMatchCompare(m, isLive, timeStr) {
-  const mk = extractOdds(m.merkur?.odds);
-  const mb = extractOdds(m.maxbet?.odds);
-  const sb = extractOdds(m.soccerbet?.odds);
-  const hasMk = m.merkur !== null;
-  const hasMb = m.maxbet !== null;
-  const hasSb = m.soccerbet !== null;
-
-  // Build odds array for all present bookies (used for best/worst highlighting)
-  const allOdds = [hasMk && mk, hasMb && mb, hasSb && sb].filter(Boolean);
-
-  const mkRow = hasMk ? renderBkRow('MRK', 'm', mk, allOdds) : '';
-  const mbRow = hasMb ? renderBkRow('MAX', 'b', mb, allOdds) : '';
-  const sbRow = hasSb ? renderBkRow('SBT', 's', sb, allOdds) : '';
+  const oddsPerBk = BOOKIES.map(bk => ({
+    bk,
+    data: m.bookmakers[bk.key],
+    parsed: extractOdds(m.bookmakers[bk.key]?.odds),
+  }));
+  const allOdds = oddsPerBk.filter(o => o.data !== null).map(o => o.parsed);
+  const rows = oddsPerBk
+    .map(({ bk, data, parsed }) => data !== null ? renderBkRow(bk.label, bk.cls, parsed, allOdds) : '')
+    .join('');
 
   return `
     <div class="match-group${isLive ? ' is-live' : ''}${m.matched ? ' is-matched' : ''}">
@@ -809,11 +929,7 @@ function renderMatchCompare(m, isLive, timeStr) {
           <div class="m-away" title="${esc(m.away)}">${esc(m.away)}</div>
         </div>
       </div>
-      <div class="mg-rows">
-        ${mkRow}
-        ${mbRow}
-        ${sbRow}
-      </div>
+      <div class="mg-rows">${rows}</div>
     </div>`;
 }
 
@@ -997,70 +1113,67 @@ async function loadData() {
   try {
     // Load shared aliases FIRST
     await loadAliasDB();
-    const [merkurRes, maxbetRes, soccerbetRes] = await Promise.all([
-      fetch(APIS.merkur),
-      fetch(APIS.maxbet),
-      fetch(APIS.soccerbet),
-    ]);
 
-    if (!merkurRes.ok) throw new Error(`MerkurXtip HTTP ${merkurRes.status}`);
-    if (!maxbetRes.ok) throw new Error(`MaxBet HTTP ${maxbetRes.status}`);
-    if (!soccerbetRes.ok) throw new Error(`SoccerBet HTTP ${soccerbetRes.status}`);
-
-    const [merkurData, maxbetData, soccerbetData] = await Promise.all([
-      merkurRes.json(),
-      maxbetRes.json(),
-      soccerbetRes.json(),
-    ]);
-
-    const merkurMatches = parseMatches(merkurData);
-    const maxbetMatches = parseMatches(maxbetData);
-    const soccerbetMatches = parseSoccerbetMatches(soccerbetData);
+    // ── FETCH all bookmakers in parallel ───────────────────
+    const responses = await Promise.all(BOOKIES.map(b => {
+      const url  = typeof b.url === 'function' ? b.url() : b.url;
+      const opts = b.headers ? { headers: b.headers } : {};
+      return fetch(url, opts);
+    }));
+    BOOKIES.forEach((b, i) => {
+      if (!responses[i].ok) throw new Error(`${b.key} HTTP ${responses[i].status}`);
+    });
+    const rawData = await Promise.all(responses.map(r => r.json()));
+    const parsed  = BOOKIES.map((b, i) => b.parse(rawData[i]));
 
     // ── LEAGUE ALIAS NORMALIZATION ─────────────────────────
-    // If a MaxBet league name is aliased to a Merkur league name,
-    // normalize the MaxBet matches to use the Merkur name
-    // so they group together in the UI.
-    const leagueAliasMap = buildLeagueAliasMap(normLeague);
-
-    // Index by normalized Maxbet name for reverse lookup
-    // (Alias DB stores Merkur -> Maxbet)
-    // We also peek at the actual names to pick the one with the country
-    const revLeagueMap = new Map();
-    getLeagueAliases().forEach(a => {
-      const best = pickBetterLeagueName(a.merkur, a.maxbet);
-      revLeagueMap.set(normLeague(a.maxbet), best);
-      // Also ensure Merkur matches in this alias group use the "best" name
-      revLeagueMap.set(normLeague(a.merkur), best);
+    // Build display name override map (highest priority — user-defined canonical names)
+    const displayNameOverrides = new Map();
+    getLeagueDisplayNames().forEach(d => {
+      displayNameOverrides.set(normLeague(d.merkur_name), d.display_name);
     });
 
-    merkurMatches.forEach(mk => {
-      const canonical = revLeagueMap.get(normLeague(mk.leagueName));
-      if (canonical) mk.leagueName = canonical;
+    // Generic helper: build a reverse-lookup map from any bookie's league aliases.
+    // Maps normBookieName → canonical and normMerkurName → canonical.
+    function buildRevMap(rawAliases, bookieKey) {
+      const map = new Map();
+      rawAliases.forEach(a => {
+        const normMrk = normLeague(a.merkur);
+        const best = displayNameOverrides.get(normMrk) ?? pickBetterLeagueName(a.merkur, a[bookieKey]);
+        map.set(normLeague(a[bookieKey]), best);
+        map.set(normMrk, best);
+      });
+      return map;
+    }
+
+    // Base rev map built from BOOKIES[1] (maxbet) — shared canonical reference
+    const baseRevMap = buildRevMap(BOOKIES[1].rawLeagueAliases(), BOOKIES[1].key);
+    displayNameOverrides.forEach((dn, normMrk) => {
+      if (!baseRevMap.has(normMrk)) baseRevMap.set(normMrk, dn);
     });
 
-    maxbetMatches.forEach(mb => {
-      const canonical = revLeagueMap.get(normLeague(mb.leagueName));
-      if (canonical) mb.leagueName = canonical;
-    });
+    // Normalize merkur and maxbet matches with the base map
+    parsed[0].forEach(m => { const c = baseRevMap.get(normLeague(m.leagueName)); if (c) m.leagueName = c; });
+    parsed[1].forEach(m => { const c = baseRevMap.get(normLeague(m.leagueName)); if (c) m.leagueName = c; });
 
-    // For soccerbet leagues: first check soccerbet-specific aliases (merkur→soccerbet),
-    // then fall back to the shared merkur/maxbet canonical map.
-    const revSbtLeagueMap = new Map();
-    getSoccerbetLeagueAliases().forEach(a => {
-      const best = pickBetterLeagueName(a.merkur, a.soccerbet);
-      revSbtLeagueMap.set(normLeague(a.soccerbet), best);
-      revSbtLeagueMap.set(normLeague(a.merkur), best);
-    });
+    // For each additional bookie: build its own rev map, normalize with baseRevMap fallback
+    for (let i = 2; i < BOOKIES.length; i++) {
+      const bk = BOOKIES[i];
+      const bookieRevMap = buildRevMap(bk.rawLeagueAliases(), bk.key);
+      parsed[i].forEach(m => {
+        const c = bookieRevMap.get(normLeague(m.leagueName)) || baseRevMap.get(normLeague(m.leagueName));
+        if (c) m.leagueName = c;
+      });
+    }
 
-    soccerbetMatches.forEach(sb => {
-      const canonical = revSbtLeagueMap.get(normLeague(sb.leagueName))
-                     || revLeagueMap.get(normLeague(sb.leagueName));
-      if (canonical) sb.leagueName = canonical;
-    });
-
-    const merged = mergeMatches(merkurMatches, maxbetMatches);
-    allMatches = matchSoccerbet(merged, soccerbetMatches);
+    // ── MERGE ──────────────────────────────────────────────
+    let merged = mergeMatches(parsed[0], parsed[1], BOOKIES[1].getTeamAliasMap(), BOOKIES[1].getLeagueAliasMap());
+    for (let i = 2; i < BOOKIES.length; i++) {
+      const bk = BOOKIES[i];
+      const cross = bk.getCrossAliasMaps ? bk.getCrossAliasMaps() : {};
+      merged = mergeBookmaker(merged, parsed[i], bk.key, bk.getTeamAliasMap(), bk.getLeagueAliasMap(), cross);
+    }
+    allMatches = merged;
 
     // Header stats
     const liveN = allMatches.filter(m => m.live).length;
