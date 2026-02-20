@@ -1024,15 +1024,33 @@ document.getElementById('btnLoadUngrouped').addEventListener('click', async () =
         }).sort();
 
         const list = document.getElementById('listUngrouped');
+        const searchWrap = document.getElementById('ungroupedSearchWrap');
+        const searchInput = document.getElementById('ungroupedSearch');
+        const searchCount = document.getElementById('ungroupedSearchCount');
+
         if (!ungrouped.length) {
             list.innerHTML = `<div class="am-empty">No ungrouped leagues found! 🎉</div>`;
+            searchWrap.style.display = 'none';
         } else {
-            list.innerHTML = ungrouped.map(name => `
+            const renderRows = (names) => names.map(name => `
                 <div class="am-alias-row" style="cursor:pointer" onclick="document.getElementById('inGroupLeague').value='${esc(name)}'; document.getElementById('inGroupTarget').focus()">
                     <div class="am-alias-name">${esc(name)}</div>
                     <div class="am-alias-meta">Click to assign</div>
                 </div>
             `).join('');
+
+            list.innerHTML = renderRows(ungrouped);
+            searchCount.textContent = `${ungrouped.length} leagues`;
+            searchWrap.style.display = '';
+            searchInput.value = '';
+            searchInput.oninput = () => {
+                const q = searchInput.value.trim().toLowerCase();
+                const filtered = q ? ungrouped.filter(n => n.toLowerCase().includes(q)) : ungrouped;
+                list.innerHTML = filtered.length
+                    ? renderRows(filtered)
+                    : `<div class="am-empty">No matches for "${esc(searchInput.value)}"</div>`;
+                searchCount.textContent = q ? `${filtered.length} / ${ungrouped.length}` : `${ungrouped.length} leagues`;
+            };
         }
         toast(`Found ${ungrouped.length} ungrouped leagues`);
     } catch (err) {
