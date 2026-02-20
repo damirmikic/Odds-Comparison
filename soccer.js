@@ -196,35 +196,42 @@ function calculateTraderSpecs(m) {
   }
 
   // 2. VALUE (Sharp reference = Cloudbet)
-  const sharpOdds = bks.cloudbet ? extractOdds(bks.cloudbet.odds) : null;
-  if (sharpOdds && valid(sharpOdds.h) && valid(sharpOdds.x) && valid(sharpOdds.a)) {
-    const fair = getFairProbs(sharpOdds.h, sharpOdds.x, sharpOdds.a);
+  const sharpData = bks.cloudbet;
+  if (sharpData) {
+    // Use API-provided probabilities directly when available (no margin removal needed),
+    // falling back to Equal Margin removal from odds.
+    const p = sharpData.probs;
+    let fair = null;
+    if (p && p['1'] > 0 && p['2'] > 0 && p['3'] > 0) {
+      fair = { h: p['1'], x: p['2'], a: p['3'], ov: p['24'], un: p['22'] };
+    } else {
+      const sharpOdds = extractOdds(sharpData.odds);
+      if (valid(sharpOdds.h) && valid(sharpOdds.x) && valid(sharpOdds.a)) {
+        const fp = getFairProbs(sharpOdds.h, sharpOdds.x, sharpOdds.a);
+        if (fp) fair = { h: fp.h, x: fp.x, a: fp.a };
+      }
+    }
+
     if (fair) {
       m.valueBets = [];
+      const outcomes = ['h', 'x', 'a'];
+      if (fair.ov > 0) outcomes.push('ov', 'un');
       // Compare Merkur, Maxbet, Soccerbet against Cloudbet fair prices
       ['merkur', 'maxbet', 'soccerbet'].forEach(bkKey => {
         const bkData = bks[bkKey];
         if (!bkData) return;
         const bkOdds = extractOdds(bkData.odds);
-
-        ['h', 'x', 'a'].forEach(outcome => {
-          if (valid(bkOdds[outcome])) {
-            const ev = bkOdds[outcome] * fair[outcome];
+        for (const outcome of outcomes) {
+          const prob = fair[outcome];
+          if (prob > 0 && valid(bkOdds[outcome])) {
+            const ev = bkOdds[outcome] * prob;
             if (ev > 1.01) { // 1% minimum edge
-              m.valueBets.push({
-                bk: bkKey,
-                outcome,
-                odd: bkOdds[outcome],
-                fair: 1 / fair[outcome],
-                ev: ev - 1
-              });
+              m.valueBets.push({ bk: bkKey, outcome, odd: bkOdds[outcome], fair: 1 / prob, ev: ev - 1 });
             }
           }
-        });
+        }
       });
-      if (m.valueBets.length > 0) {
-        m.valueBets.sort((a, b) => b.ev - a.ev);
-      }
+      if (m.valueBets.length > 0) m.valueBets.sort((a, b) => b.ev - a.ev);
     }
   }
 }
@@ -425,15 +432,16 @@ function parseCloudbetMatches(data) {
 
       const markets = event.markets || {};
       const odds = {};
+      const probs = {};
 
       // 1X2
       const ftMatch = markets['soccer.match_odds']?.submarkets?.['period=ft'];
       if (ftMatch) {
         for (const sel of (ftMatch.selections || [])) {
           if (sel.status !== 'SELECTION_ENABLED') continue;
-          if (sel.outcome === 'home') odds['1'] = sel.price;
-          if (sel.outcome === 'draw') odds['2'] = sel.price;
-          if (sel.outcome === 'away') odds['3'] = sel.price;
+          if (sel.outcome === 'home') { odds['1'] = sel.price; if (sel.probability > 0) probs['1'] = sel.probability; }
+          if (sel.outcome === 'draw') { odds['2'] = sel.price; if (sel.probability > 0) probs['2'] = sel.probability; }
+          if (sel.outcome === 'away') { odds['3'] = sel.price; if (sel.probability > 0) probs['3'] = sel.probability; }
         }
       }
 
@@ -442,10 +450,14 @@ function parseCloudbetMatches(data) {
       if (ftGoals) {
         for (const sel of (ftGoals.selections || [])) {
           if (sel.status !== 'SELECTION_ENABLED' || sel.params !== 'total=2.5') continue;
-          if (sel.outcome === 'over') odds['24'] = sel.price;
-          if (sel.outcome === 'under') odds['22'] = sel.price;
+          if (sel.outcome === 'over')  { odds['24'] = sel.price; if (sel.probability > 0) probs['24'] = sel.probability; }
+          if (sel.outcome === 'under') { odds['22'] = sel.price; if (sel.probability > 0) probs['22'] = sel.probability; }
         }
       }
+
+      // Build fair (no-vig) odds directly from API probabilities
+      const fairOdds = {};
+      for (const [k, p] of Object.entries(probs)) fairOdds[k] = 1 / p;
 
       matches.push({
         home: event.home.name,
@@ -454,6 +466,8 @@ function parseCloudbetMatches(data) {
         kickOffTime: new Date(event.cutoffTime).getTime(),
         live: event.status === 'TRADING_LIVE' && new Date(event.cutoffTime).getTime() <= Date.now(),
         odds,
+        fairOdds: Object.keys(fairOdds).length > 0 ? fairOdds : undefined,
+        probs: Object.keys(probs).length > 0 ? probs : undefined,
         oddsCount: Object.keys(markets).length,
       });
     }
@@ -776,7 +790,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
     if (idx !== -1) {
       used.add(idx);
       const entry = newList[idx];
-      return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount } } };
+      return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount, fairOdds: entry.fairOdds, probs: entry.probs } } };
     }
     return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: null } };
   });
@@ -791,7 +805,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
         leagueName: entry.leagueName,
         kickOffTime: entry.kickOffTime,
         live: entry.live,
-        bookmakers: { ...emptyBks, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount } },
+        bookmakers: { ...emptyBks, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount, fairOdds: entry.fairOdds, probs: entry.probs } },
         matched: false,
         matchQuality: null,
       });
@@ -1043,6 +1057,22 @@ function renderMatchCompare(m, isLive, timeStr) {
     .map(({ bk, data, parsed }) => data !== null ? renderBkRow(bk.label, bk.cls, parsed, allOdds, m.valueBets, bk.key, matchKey) : '')
     .join('');
 
+  let fairRow = '';
+  const cbFairOdds = m.bookmakers.cloudbet?.fairOdds;
+  if (cbFairOdds) {
+    const fmt = k => (cbFairOdds[k] > 0) ? cbFairOdds[k].toFixed(2) : '—';
+    fairRow = `
+    <div class="bk-row bk-row-fair">
+      <div class="bk-label">FAIR</div>
+      <div class="m-odd cmp-odd fair-odd" title="Fair Home">${fmt('1')}</div>
+      <div class="m-odd cmp-odd fair-odd" title="Fair Draw">${fmt('2')}</div>
+      <div class="m-odd cmp-odd fair-odd" title="Fair Away">${fmt('3')}</div>
+      <div class="m-line">2.5</div>
+      <div class="m-odd cmp-odd fair-odd" title="Fair Over 2.5">${fmt('24')}</div>
+      <div class="m-odd cmp-odd fair-odd" title="Fair Under 2.5">${fmt('22')}</div>
+    </div>`;
+  }
+
   let badges = '';
   if (m.arb) {
     badges += `<span class="vbet-badge vbet-badge-arb">⚖ Arb ${(m.arb.roi * 100).toFixed(1)}%</span>`;
@@ -1062,7 +1092,7 @@ function renderMatchCompare(m, isLive, timeStr) {
         </div>
         <div class="mg-badges">${badges}</div>
       </div>
-      <div class="mg-rows">${rows}</div>
+      <div class="mg-rows">${rows}${fairRow}</div>
     </div>`;
 }
 
