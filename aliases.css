@@ -992,3 +992,445 @@ body {
     display: flex;
     gap: 10px;
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   PARALLEL MAP TAB
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.am-pm-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.am-pm-toolbar .am-search {
+    flex: 1;
+    min-width: 180px;
+}
+
+/* Two-column grid: narrow left list + flexible right panel */
+.am-pm-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 12px;
+    height: calc(100vh - 280px);
+    min-height: 480px;
+}
+
+/* Left column — reuses .am-picker-col look */
+.am-pm-left {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Right panel — detail on top, bulk suggestions below */
+.am-pm-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+/* Mapped badges in left list */
+.am-pm-mapped-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-family: var(--f-mono);
+    letter-spacing: 0.5px;
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-top: 3px;
+}
+
+.am-pm-badge-full {
+    color: var(--green);
+    background: var(--green-bg);
+    border: 1px solid var(--green-bdr);
+}
+
+.am-pm-badge-partial {
+    color: #F59E0B;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* ── Detail panel ─────────────────────────────────────────── */
+.am-pm-detail {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.am-pm-detail-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.am-pm-detail-inner {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Canonical name row */
+.am-pm-canon {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.am-pm-canon-label {
+    font-family: var(--f-mono);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--dim);
+}
+
+.am-pm-canon-input {
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 12px;
+}
+
+/* Three-slot area */
+.am-pm-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Individual bookmaker slot */
+.am-pm-slot {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.am-pm-slot-open {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.am-pm-slot-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: var(--f-mono);
+    letter-spacing: 0.5px;
+    color: var(--text-sub);
+    flex-shrink: 0;
+    min-width: 90px;
+}
+
+.am-pm-slot-saved {
+    margin-left: auto;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--green);
+    background: var(--green-bg);
+    border: 1px solid var(--green-bdr);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+
+.am-pm-slot-val {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.am-pm-slot-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.am-pm-slot-empty {
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+}
+
+.am-pm-change-btn {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 3px 8px;
+    margin-left: auto;
+}
+
+.am-pm-exclude-btn {
+    flex-shrink: 0;
+    font-size: 10px;
+    padding: 2px 6px;
+    margin-left: auto;
+    color: var(--muted);
+    opacity: 0.6;
+}
+
+.am-pm-exclude-btn:hover {
+    opacity: 1;
+    color: #f87171;
+}
+
+/* Excluded slot */
+.am-pm-slot-excluded {
+    opacity: 0.5;
+    border-style: dashed;
+}
+
+.am-pm-excluded-badge {
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(100, 116, 139, 0.12);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-left: 4px;
+}
+
+.am-pm-restore-btn {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 3px 8px;
+    margin-left: auto;
+}
+
+/* Open slot: inline combobox */
+.am-pm-slot-search {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+
+.am-pm-slot-close {
+    font-size: 10px;
+    padding: 2px 6px;
+    margin-left: auto;
+}
+
+.am-pm-slot-dropdown {
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    scrollbar-width: thin;
+    scrollbar-color: var(--dim) transparent;
+}
+
+.am-pm-slot-opt,
+.am-pm-slot-none {
+    padding: 7px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(31, 51, 86, 0.4);
+    color: var(--text);
+    transition: background 0.1s;
+}
+
+.am-pm-slot-opt:last-child,
+.am-pm-slot-none:last-child {
+    border-bottom: none;
+}
+
+.am-pm-slot-opt:hover,
+.am-pm-slot-none:hover {
+    background: var(--surface-2);
+}
+
+.am-pm-slot-none {
+    color: var(--muted);
+    font-style: italic;
+}
+
+/* Action row */
+.am-pm-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* ── Bulk suggestions ─────────────────────────────────────── */
+.am-pm-bulk {
+    flex: 1;
+    min-height: 0;
+}
+
+/* Bulk row */
+.am-pm-bulk-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(31, 51, 86, 0.5);
+    transition: background 0.1s;
+}
+
+.am-pm-bulk-row:last-child {
+    border-bottom: none;
+}
+
+.am-pm-bulk-row:hover {
+    background: var(--surface-2);
+}
+
+.am-pm-bulk-mrk {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--green);
+    min-width: 150px;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+}
+
+.am-pm-bulk-targets {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-width: 0;
+}
+
+.am-pm-bulk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.am-pm-bulk-chip em {
+    font-style: normal;
+    font-size: 10px;
+    opacity: 0.7;
+    font-family: var(--f-mono);
+}
+
+.am-pm-chip-max {
+    background: var(--blue-bg);
+    border: 1px solid var(--blue-bdr);
+    color: var(--blue);
+}
+
+.am-pm-chip-sbt {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #F59E0B;
+}
+
+.am-pm-chip-clb {
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #A78BFA;
+}
+
+.am-pm-bulk-skip {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 2px 7px;
+    color: var(--muted);
+}
+
+/* ── Parallel Map tooltip ─────────────────────────────────── */
+.am-pm-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 500;
+    width: 260px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.am-pm-tip-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--f-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-sub);
+}
+
+.am-pm-tip-count {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--dim);
+}
+
+.am-pm-tip-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+}
+
+.am-pm-tip-list li {
+    padding: 5px 12px;
+    font-size: 11px;
+    color: var(--text);
+    border-bottom: 1px solid rgba(31, 51, 86, 0.4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.am-pm-tip-list li:last-child {
+    border-bottom: none;
+}
+
+.am-pm-tip-home {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.am-pm-tip-vs {
+    color: var(--dim);
+    font-size: 10px;
+    margin: 0 3px;
+}
+
+.am-pm-tip-away {
+    color: var(--text-sub);
+}
+
+.am-pm-tip-more {
+    color: var(--muted) !important;
+    font-style: italic;
+    font-size: 10px !important;
+}

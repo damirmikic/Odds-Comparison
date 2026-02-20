@@ -47,6 +47,10 @@
             <span class="am-tab-icon">📁</span> Groups
             <span class="am-tab-count" id="tabGroupCount">0</span>
         </button>
+        <button class="am-tab" data-tab="parallel">
+            <span class="am-tab-icon">⬌</span> Parallel Map
+            <span class="am-tab-count" id="tabParallelCount">—</span>
+        </button>
     </div>
 
     <!-- ── MAIN ────────────────────────────────────────────────── -->
@@ -492,6 +496,56 @@
             </div>
         </section>
 
+        <!-- PARALLEL MAP TAB -->
+        <section class="am-panel" id="panelParallel">
+            <div class="am-panel-head">
+                <h2>Parallel League Mapping</h2>
+                <p>Select a Merkur league as anchor, review auto-suggestions for all bookmakers, then save all pairs at once.</p>
+            </div>
+
+            <div class="am-pm-toolbar">
+                <button class="am-btn am-btn-primary" id="btnPmLoad">⟳ Load Data</button>
+                <input class="am-input am-search" id="pmMrkSearch" placeholder="Search Merkur leagues…" autocomplete="off" />
+                <label class="am-toggle-wrap">
+                    <input type="checkbox" id="chkPmUnmappedOnly" />
+                    <span class="am-toggle-label">Unmapped only</span>
+                </label>
+            </div>
+
+            <div class="am-pm-grid" id="pmGrid">
+                <!-- Left: Merkur league list -->
+                <div class="am-pm-left am-picker-col">
+                    <div class="am-picker-head">
+                        <span class="am-bk-dot am-bk-m"></span>
+                        <span>MerkurXtip</span>
+                        <span class="am-picker-count" id="pmMrkCount"></span>
+                    </div>
+                    <div class="am-picker-list" id="pmMrkList">
+                        <div class="am-picker-empty">Click "Load Data" to start</div>
+                    </div>
+                </div>
+
+                <!-- Right: Detail + Bulk -->
+                <div class="am-pm-right">
+                    <!-- Mapping detail panel -->
+                    <div class="am-pm-detail" id="pmDetail">
+                        <div class="am-pm-detail-empty">Select a league from the left</div>
+                    </div>
+
+                    <!-- Bulk suggestions -->
+                    <div class="am-suggestions am-pm-bulk">
+                        <div class="am-sug-head">
+                            <span>✨ Bulk Suggestions</span>
+                            <button class="am-btn am-btn-primary am-sug-save-all" id="btnPmBulkSave" disabled>Save All</button>
+                        </div>
+                        <div class="am-sug-list" id="pmBulkList">
+                            <div class="am-sug-empty">Load data to see suggestions</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <!-- ── DATALISTS (populated by JS from live API) ────────── -->
@@ -506,6 +560,9 @@
 
     <!-- ── TOAST ────────────────────────────────────────────────── -->
     <div class="am-toast" id="toast"></div>
+
+    <!-- ── PARALLEL MAP TOOLTIP ─────────────────────────────────── -->
+    <div class="am-pm-tooltip" id="pmTooltip"></div>
 
     <!-- ── IMPORT MODAL ─────────────────────────────────────────── -->
     <div class="am-modal-overlay" id="importModal">

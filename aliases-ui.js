@@ -16,37 +16,35 @@ function getCloudbetUrl() {
     return `https://sports-api.cloudbet.com/pub/v2/odds/events?sport=soccer&live=false&from=${now}&to=${to}&markets=soccer.match_odds&markets=soccer.total_goals&players=false&limit=2000`;
 }
 
-// Country names mirrored from soccer.js FLAGS — used to resolve Cloudbet comp.key
-// into "Country: League Name" format (e.g. "soccer-england-premier-league" → "England: Premier League").
-const _CLB_COUNTRY_SLUGS = [
-    'England', 'Scotland', 'Wales', 'Spain', 'Germany', 'Italy', 'France',
-    'Portugal', 'Netherlands', 'Belgium', 'Turkey', 'Russia', 'Brazil',
-    'Argentina', 'USA', 'Mexico', 'Austria', 'Switzerland', 'Poland',
-    'Czech Republic', 'Croatia', 'Serbia', 'Romania', 'Ukraine', 'Greece',
-    'Denmark', 'Sweden', 'Norway', 'Finland', 'Japan', 'South Korea',
-    'China', 'Australia', 'International', 'UEFA', 'CAF', 'Africa', 'Asia',
-    'South America', 'North America', 'CONMEBOL', 'Hungary', 'Slovakia',
-    'Bulgaria', 'Israel', 'Slovenia', 'Bosnia', 'Montenegro', 'Albania',
-    'Kosovo', 'Ireland', 'Cyprus', 'Malta', 'Morocco', 'Egypt', 'Nigeria',
-    'Ghana', 'Colombia', 'Chile', 'Uruguay', 'Peru', 'Ecuador', 'Venezuela',
-    'Paraguay', 'Bolivia', 'Saudi Arabia', 'UAE', 'Iran', 'India', 'Belarus',
-    'Lithuania', 'Latvia', 'Estonia', 'Georgia', 'Armenia', 'Azerbaijan',
-    'Kazakhstan', 'Iceland', 'Luxembourg', 'Andorra', 'Uganda', 'Cameroon',
-    'Senegal', 'Tunisia', 'Algeria', 'South Africa', 'Kenya', 'Tanzania',
-    'Zambia', 'Zimbabwe', 'Angola', 'Mozambique', 'Congo', 'Ethiopia',
-    'Libya', 'Sudan', 'Costa Rica', 'Honduras', 'Guatemala', 'Panama',
-    'El Salvador', 'Nicaragua',
-].map(n => [n.toLowerCase().replace(/\s+/g, '-'), n])
- .sort((a, b) => b[0].length - a[0].length); // longest slug first
-
+// Derive "Country: League Name" from comp.key + comp.name — no hardcoded dictionary.
+// Strategy: slug-ify comp.name, strip it from the end of comp.key, remainder = country slug.
+// e.g. key="soccer-el-salvador-primera-division", name="Primera División"
+//   → compSlug="primera-division", strip → "el-salvador" → "El Salvador: Primera División"
 function resolveCloudbetLeagueName(comp) {
     const rest = (comp.key || '').replace(/^soccer-/, '');
-    for (const [slug, country] of _CLB_COUNTRY_SLUGS) {
-        if (rest === slug || rest.startsWith(slug + '-')) {
-            return `${country}: ${comp.name}`;
-        }
+    if (!rest || !comp.name) return comp.name || '';
+
+    const compSlug = comp.name
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip diacritics (é→e, ü→u, etc.)
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+    let countrySlug;
+    if (compSlug && rest.endsWith('-' + compSlug)) {
+        // Primary: strip competition slug from end → remainder is the country slug
+        countrySlug = rest.slice(0, -(compSlug.length + 1));
+    } else {
+        // Fallback (comp.name slug diverges from key): use first segment as hint
+        countrySlug = rest.split('-')[0];
     }
-    return comp.name;
+
+    if (!countrySlug) return comp.name;
+
+    const country = countrySlug.split('-')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    return `${country}: ${comp.name}`;
 }
 
 function parseCloudbetRaw(data) {
@@ -79,6 +77,19 @@ let teamSearchQuery = '';
 let leagueSearchQuery = '';
 let leagueFilterMrk = '';
 let leagueFilterMbx = '';
+
+/* ── Parallel Mapper state ─────────────────────────────────── */
+let pmLeagues    = { mrk: [], max: [], sbt: [], clb: [] };
+let pmMatches    = { mrk: {}, max: {}, sbt: {}, clb: {} }; // leagueName → [{home,away}]
+let pmLoaded     = false;
+let pmSelMrk     = null;
+let pmEditName   = null;
+let pmOverrides  = { max: null, sbt: null, clb: null };
+let pmBulkSugs   = [];
+let pmMrkFilter  = '';
+let pmUnmappedOnly = false;
+let pmActiveSlot = null;
+let pmSlotFilter = '';
 
 /* ── Bookie metadata ───────────────────────────────────────── */
 const BK_META = {
@@ -1553,6 +1564,488 @@ async function ensureNameCache() {
         console.warn('[aliases] Name cache load failed:', e.message);
     }
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   PARALLEL MAP TAB
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+async function loadPmData() {
+    const btn = document.getElementById('btnPmLoad');
+    btn.disabled = true; btn.textContent = '…';
+    try {
+        const keys = ['mrk', 'max', 'sbt', 'clb'];
+        const results = await Promise.all(keys.map(k => BK_META[k].api().then(r => r.json())));
+        keys.forEach((k, i) => {
+            const matches = parseForBookie(k, results[i]);
+            const byLeague = {};
+            for (const m of matches) {
+                if (!byLeague[m.leagueName]) byLeague[m.leagueName] = [];
+                byLeague[m.leagueName].push({ home: m.home, away: m.away });
+            }
+            pmMatches[k] = byLeague;
+            pmLeagues[k] = Object.keys(byLeague).sort((a, b) => a.localeCompare(b));
+        });
+        pmLoaded = true;
+        pmBulkSugs = computePmBulkSuggestions();
+        renderPmLeft();
+        renderPmDetail();
+        renderPmBulk();
+        document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
+        toast(`Loaded: ${pmLeagues.mrk.length} Merkur · ${pmLeagues.max.length} MaxBet · ${pmLeagues.sbt.length} SoccerBet · ${pmLeagues.clb.length} Cloudbet leagues`);
+    } catch (e) {
+        toast('Load failed: ' + e.message, 'err');
+    } finally {
+        btn.disabled = false; btn.textContent = '⟳ Load Data';
+    }
+}
+
+// Returns 'none' | 'partial' | 'full'
+// When data is loaded, only counts sources that are active (have leagues).
+// When data is not loaded, falls back to raw alias count vs. all 3 pairs.
+function getPmMappedState(mrkName) {
+    const hasMax = getLeagueAliases().some(a => a.merkur === mrkName);
+    const hasSbt = getSoccerbetLeagueAliases().some(a => a.merkur === mrkName);
+    const hasClb = getCloudbetLeagueAliases().some(a => a.merkur === mrkName);
+    if (pmLoaded) {
+        const srcMax = pmLeagues.max.length > 0;
+        const srcSbt = pmLeagues.sbt.length > 0;
+        const srcClb = pmLeagues.clb.length > 0;
+        const total  = (srcMax ? 1 : 0) + (srcSbt ? 1 : 0) + (srcClb ? 1 : 0);
+        const mapped = (srcMax && hasMax ? 1 : 0) + (srcSbt && hasSbt ? 1 : 0) + (srcClb && hasClb ? 1 : 0);
+        if (total === 0 || mapped === 0) return 'none';
+        return mapped === total ? 'full' : 'partial';
+    }
+    const count = (hasMax ? 1 : 0) + (hasSbt ? 1 : 0) + (hasClb ? 1 : 0);
+    if (count === 0) return 'none';
+    return count === 3 ? 'full' : 'partial';
+}
+
+function getBestPmMatch(mrkName, targetLeagues) {
+    let best = null;
+    for (const name of targetLeagues) {
+        const score = nameSim(mrkName, name);
+        if (score >= 0.25 && (!best || score > best.score))
+            best = { name, score };
+    }
+    return best;
+}
+
+function computePmBulkSuggestions() {
+    const mappedMrk = new Set([
+        ...getLeagueAliases().map(a => a.merkur),
+        ...getSoccerbetLeagueAliases().map(a => a.merkur),
+        ...getCloudbetLeagueAliases().map(a => a.merkur),
+    ]);
+    const list = pmLeagues.mrk.filter(n => !mappedMrk.has(n));
+    const results = [];
+    for (const mrk of list.slice(0, 200)) {
+        const maxM = getBestPmMatch(mrk, pmLeagues.max);
+        const sbtM = getBestPmMatch(mrk, pmLeagues.sbt);
+        const clbM = getBestPmMatch(mrk, pmLeagues.clb);
+        if (maxM || sbtM || clbM) {
+            results.push({
+                mrk,
+                max: maxM ? maxM.name : null,
+                sbt: sbtM ? sbtM.name : null,
+                clb: clbM ? clbM.name : null,
+                scores: { max: maxM ? maxM.score : 0, sbt: sbtM ? sbtM.score : 0, clb: clbM ? clbM.score : 0 },
+            });
+        }
+    }
+    return results.sort((a, b) => {
+        const aAvg = (a.scores.max + a.scores.sbt + a.scores.clb) / 3;
+        const bAvg = (b.scores.max + b.scores.sbt + b.scores.clb) / 3;
+        return bAvg - aAvg;
+    }).slice(0, 30);
+}
+
+function renderPmLeft() {
+    const q = pmMrkFilter.toLowerCase();
+    let list = pmLeagues.mrk;
+    if (pmUnmappedOnly) list = list.filter(n => getPmMappedState(n) !== 'full');
+    if (q) list = list.filter(n => n.toLowerCase().includes(q));
+    document.getElementById('pmMrkCount').textContent = list.length;
+    document.getElementById('pmMrkList').innerHTML = list.length
+        ? list.map(n => {
+            const state = getPmMappedState(n);
+            const badge = state === 'full'
+                ? '<div class="am-pm-mapped-badge am-pm-badge-full">mapped</div>'
+                : state === 'partial'
+                    ? '<div class="am-pm-mapped-badge am-pm-badge-partial">partial</div>'
+                    : '';
+            return `
+            <div class="am-pick-item${pmSelMrk === n ? ' selected' : ''}" data-name="${esc(n)}" data-side="pm-mrk" data-src="mrk" data-league="${esc(n)}">
+              <div class="am-pick-name">${esc(n)}</div>
+              ${badge}
+            </div>`;
+        }).join('')
+        : `<div class="am-picker-empty">${pmLoaded ? 'No leagues found' : 'Click "Load Data" to start'}</div>`;
+}
+
+function renderPmDetail() {
+    const container = document.getElementById('pmDetail');
+    if (!pmSelMrk) {
+        container.innerHTML = '<div class="am-pm-detail-empty">Select a league from the left</div>';
+        return;
+    }
+    const canonName = pmEditName !== null ? pmEditName : pmSelMrk;
+    const slots = [
+        { key: 'max', label: 'MaxBet',    dotCls: 'am-bk-b',  nameKey: 'maxbet',    aliasGetter: getLeagueAliases },
+        { key: 'sbt', label: 'SoccerBet', dotCls: 'am-bk-s',  nameKey: 'soccerbet', aliasGetter: getSoccerbetLeagueAliases },
+        { key: 'clb', label: 'Cloudbet',  dotCls: 'am-bk-cl', nameKey: 'cloudbet',  aliasGetter: getCloudbetLeagueAliases },
+    ];
+
+    const resolved = {};
+    for (const { key, nameKey, aliasGetter } of slots) {
+        const existing = aliasGetter().find(a => a.merkur === pmSelMrk);
+        if (existing) {
+            resolved[key] = { name: existing[nameKey], score: null, existing: true };
+        } else if (pmOverrides[key] !== null && pmOverrides[key] !== undefined) {
+            resolved[key] = pmOverrides[key] ? { name: pmOverrides[key], score: null, existing: false } : null;
+        } else {
+            const match = getBestPmMatch(pmSelMrk, pmLeagues[key]);
+            resolved[key] = match ? { name: match.name, score: match.score, existing: false } : null;
+        }
+    }
+
+    const slotHtml = slots.map(({ key, label, dotCls }) => {
+        const r = resolved[key];
+        if (pmActiveSlot === key) {
+            const f = pmSlotFilter.toLowerCase();
+            const options = pmLeagues[key].filter(n => !f || n.toLowerCase().includes(f));
+            return `
+              <div class="am-pm-slot am-pm-slot-open" data-slot="${key}">
+                <div class="am-pm-slot-head">
+                  <span class="am-bk-dot ${dotCls}"></span>
+                  <span>${label}</span>
+                  <button class="am-btn am-btn-ghost am-pm-slot-close" data-slot="${key}">✕ close</button>
+                </div>
+                <input class="am-input am-pm-slot-search" id="pmSlotInput_${key}"
+                       value="${esc(pmSlotFilter)}" placeholder="Search ${label}…" autocomplete="off" />
+                <div class="am-pm-slot-dropdown">
+                  <div class="am-pm-slot-none" data-slot="${key}" data-val="">— No mapping —</div>
+                  ${options.slice(0, 60).map(n => `
+                    <div class="am-pm-slot-opt" data-slot="${key}" data-val="${esc(n)}">${esc(n)}</div>`).join('')}
+                </div>
+              </div>`;
+        }
+        const isExcluded = pmOverrides[key] === false;
+        if (isExcluded) {
+            return `
+              <div class="am-pm-slot am-pm-slot-excluded" data-slot="${key}">
+                <div class="am-pm-slot-head">
+                  <span class="am-bk-dot ${dotCls}" style="opacity:0.35"></span>
+                  <span>${label}</span>
+                  <span class="am-pm-excluded-badge">excluded</span>
+                </div>
+                <div class="am-pm-slot-val">
+                  <span class="am-pm-slot-empty">Not offered — no pairs will be created</span>
+                </div>
+                <button class="am-btn am-btn-ghost am-pm-restore-btn" data-slot="${key}">↩ restore</button>
+              </div>`;
+        }
+        return `
+          <div class="am-pm-slot" data-slot="${key}">
+            <div class="am-pm-slot-head">
+              <span class="am-bk-dot ${dotCls}"></span>
+              <span>${label}</span>
+              ${r && r.existing ? '<span class="am-pm-slot-saved">saved</span>' : ''}
+              <button class="am-btn am-btn-ghost am-pm-exclude-btn" data-slot="${key}" title="Exclude — bookmaker doesn't offer this league">✕ exclude</button>
+            </div>
+            <div class="am-pm-slot-val">
+              ${r
+                ? `<span class="am-pm-slot-name" data-src="${key}" data-league="${esc(r.name)}">${esc(r.name)}</span>
+                   ${r.score !== null ? `<span class="am-sug-score">${Math.round(r.score * 100)}%</span>` : ''}`
+                : `<span class="am-pm-slot-empty">No match found</span>`}
+            </div>
+            <button class="am-btn am-btn-ghost am-pm-change-btn" data-slot="${key}">✎ change</button>
+          </div>`;
+    }).join('');
+
+    const hasSomething = Object.values(resolved).some(r => r && !r.existing);
+    container.innerHTML = `
+      <div class="am-pm-detail-inner">
+        <div class="am-pm-canon">
+          <label class="am-pm-canon-label">Canonical name (Merkur anchor)</label>
+          <input class="am-input am-pm-canon-input" id="pmCanonInput" value="${esc(canonName)}" />
+        </div>
+        <div class="am-pm-slots">${slotHtml}</div>
+        <div class="am-pm-actions">
+          <button class="am-btn am-btn-primary" id="btnPmSave"${hasSomething ? '' : ' disabled'}>Save Mappings</button>
+          <button class="am-btn am-btn-ghost" id="btnPmClear">Clear</button>
+        </div>
+      </div>`;
+
+    // Re-attach transient events for newly rendered elements
+    const canonInput = document.getElementById('pmCanonInput');
+    if (canonInput) canonInput.addEventListener('input', e => { pmEditName = e.target.value; });
+
+    const saveBtn = document.getElementById('btnPmSave');
+    if (saveBtn) saveBtn.addEventListener('click', onPmSave);
+
+    const clearBtn = document.getElementById('btnPmClear');
+    if (clearBtn) clearBtn.addEventListener('click', onPmClear);
+
+    // Exclude / restore buttons
+    container.querySelectorAll('.am-pm-exclude-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            pmOverrides[btn.dataset.slot] = false;
+            if (pmActiveSlot === btn.dataset.slot) { pmActiveSlot = null; pmSlotFilter = ''; }
+            renderPmDetail();
+        });
+    });
+    container.querySelectorAll('.am-pm-restore-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            pmOverrides[btn.dataset.slot] = null;
+            renderPmDetail();
+        });
+    });
+
+    // Slot change buttons
+    container.querySelectorAll('.am-pm-change-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            pmActiveSlot = btn.dataset.slot;
+            pmSlotFilter = '';
+            renderPmDetail();
+            const input = document.getElementById(`pmSlotInput_${pmActiveSlot}`);
+            if (input) input.focus();
+        });
+    });
+
+    // Slot close buttons
+    container.querySelectorAll('.am-pm-slot-close').forEach(btn => {
+        btn.addEventListener('click', () => {
+            pmActiveSlot = null;
+            pmSlotFilter = '';
+            renderPmDetail();
+        });
+    });
+
+    // Open slot: search input
+    if (pmActiveSlot) {
+        const inp = document.getElementById(`pmSlotInput_${pmActiveSlot}`);
+        if (inp) {
+            inp.addEventListener('input', e => {
+                pmSlotFilter = e.target.value;
+                renderPmDetail();
+                // Restore focus after re-render
+                const newInp = document.getElementById(`pmSlotInput_${pmActiveSlot}`);
+                if (newInp) { newInp.focus(); newInp.setSelectionRange(newInp.value.length, newInp.value.length); }
+            });
+        }
+        // Dropdown options
+        container.querySelectorAll('.am-pm-slot-opt, .am-pm-slot-none').forEach(opt => {
+            opt.addEventListener('click', () => {
+                pmOverrides[opt.dataset.slot] = opt.dataset.val || '';
+                pmActiveSlot = null;
+                pmSlotFilter = '';
+                renderPmDetail();
+            });
+        });
+    }
+}
+
+function renderPmBulk() {
+    const container = document.getElementById('pmBulkList');
+    const btn = document.getElementById('btnPmBulkSave');
+    if (!pmBulkSugs.length) {
+        container.innerHTML = '<div class="am-sug-empty">No suggestions — all leagues may already be mapped</div>';
+        if (btn) btn.disabled = true;
+        return;
+    }
+    if (btn) btn.disabled = false;
+    container.innerHTML = pmBulkSugs.map((s, i) => `
+      <div class="am-pm-bulk-row" data-idx="${i}">
+        <div class="am-pm-bulk-mrk">${esc(s.mrk)}</div>
+        <div class="am-pm-bulk-targets">
+          ${s.max ? `<span class="am-pm-bulk-chip am-pm-chip-max" title="MaxBet">${esc(s.max)} <em>${Math.round(s.scores.max * 100)}%</em></span>` : ''}
+          ${s.sbt ? `<span class="am-pm-bulk-chip am-pm-chip-sbt" title="SoccerBet">${esc(s.sbt)} <em>${Math.round(s.scores.sbt * 100)}%</em></span>` : ''}
+          ${s.clb ? `<span class="am-pm-bulk-chip am-pm-chip-clb" title="Cloudbet">${esc(s.clb)} <em>${Math.round(s.scores.clb * 100)}%</em></span>` : ''}
+        </div>
+        <button class="am-btn am-btn-ghost am-pm-bulk-skip" data-idx="${i}" title="Skip">✗</button>
+      </div>`).join('');
+}
+
+async function saveParallelMapping(mrkName, max, sbt, clb) {
+    const saves = [];
+    if (max) saves.push(addLeagueAlias(mrkName, max));
+    if (sbt) saves.push(addSoccerbetLeagueAlias(mrkName, sbt));
+    if (clb) saves.push(addCloudbetLeagueAlias(mrkName, clb));
+    if (max && sbt) saves.push(addMaxbetSbtLeagueAlias(max, sbt));
+    if (max && clb) saves.push(addMaxbetClbLeagueAlias(max, clb));
+    if (sbt && clb) saves.push(addSbtClbLeagueAlias(sbt, clb));
+    await Promise.all(saves);
+}
+
+async function onPmSave() {
+    if (!pmSelMrk) return;
+    const mrkName = (pmEditName !== null && pmEditName.trim()) ? pmEditName.trim() : pmSelMrk;
+    const slots = [
+        { key: 'max', nameKey: 'maxbet',    aliasGetter: getLeagueAliases },
+        { key: 'sbt', nameKey: 'soccerbet', aliasGetter: getSoccerbetLeagueAliases },
+        { key: 'clb', nameKey: 'cloudbet',  aliasGetter: getCloudbetLeagueAliases },
+    ];
+    const resolved = {};
+    for (const { key, nameKey, aliasGetter } of slots) {
+        const existing = aliasGetter().find(a => a.merkur === pmSelMrk);
+        if (existing) {
+            resolved[key] = null; // already saved, skip
+        } else if (pmOverrides[key] !== null && pmOverrides[key] !== undefined) {
+            resolved[key] = pmOverrides[key] || null;
+        } else {
+            const match = getBestPmMatch(pmSelMrk, pmLeagues[key]);
+            resolved[key] = match ? match.name : null;
+        }
+    }
+    try {
+        await saveParallelMapping(mrkName, resolved.max, resolved.sbt, resolved.clb);
+        renderLeagueList();
+        renderSbtLeagueList();
+        renderClbLeagueList();
+        renderMbxSbtLeagueList();
+        renderMbxClbLeagueList();
+        renderSbtClbLeagueList();
+        // Remove saved league from bulk suggestions
+        pmBulkSugs = pmBulkSugs.filter(s => s.mrk !== pmSelMrk);
+        renderPmBulk();
+        document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
+        onPmClear();
+        renderPmLeft();
+        toast('Mappings saved');
+    } catch (e) {
+        toast('Save failed: ' + e.message, 'err');
+    }
+}
+
+function onPmClear() {
+    pmSelMrk = null;
+    pmEditName = null;
+    pmOverrides = { max: null, sbt: null, clb: null };
+    pmActiveSlot = null;
+    pmSlotFilter = '';
+    renderPmDetail();
+    renderPmLeft();
+}
+
+/* ── Parallel Map event handlers ───────────────────────────── */
+
+document.getElementById('btnPmLoad').addEventListener('click', loadPmData);
+
+document.getElementById('pmMrkSearch').addEventListener('input', e => {
+    pmMrkFilter = e.target.value;
+    renderPmLeft();
+});
+
+document.getElementById('chkPmUnmappedOnly').addEventListener('change', e => {
+    pmUnmappedOnly = e.target.checked;
+    renderPmLeft();
+});
+
+document.getElementById('pmMrkList').addEventListener('click', e => {
+    const item = e.target.closest('.am-pick-item');
+    if (!item || item.dataset.side !== 'pm-mrk') return;
+    pmSelMrk = pmSelMrk === item.dataset.name ? null : item.dataset.name;
+    pmEditName = null;
+    pmOverrides = { max: null, sbt: null, clb: null };
+    pmActiveSlot = null;
+    pmSlotFilter = '';
+    renderPmLeft();
+    renderPmDetail();
+});
+
+/* ── Parallel Map tooltip ───────────────────────────────────── */
+
+function showPmTooltip(anchorEl, srcKey, leagueName) {
+    const matches = pmMatches[srcKey] && pmMatches[srcKey][leagueName];
+    if (!matches || !matches.length) return;
+    const tip = document.getElementById('pmTooltip');
+    const SHOW = 7;
+    const more = matches.length - SHOW;
+    tip.innerHTML = `
+        <div class="am-pm-tip-head">
+            <span class="am-bk-dot ${BK_META[srcKey].dotCls}"></span>
+            <span>${BK_META[srcKey].label}</span>
+            <span class="am-pm-tip-count">${matches.length} match${matches.length !== 1 ? 'es' : ''}</span>
+        </div>
+        <ul class="am-pm-tip-list">
+            ${matches.slice(0, SHOW).map(m => `<li><span class="am-pm-tip-home">${esc(m.home)}</span> <span class="am-pm-tip-vs">vs</span> <span class="am-pm-tip-away">${esc(m.away)}</span></li>`).join('')}
+            ${more > 0 ? `<li class="am-pm-tip-more">…and ${more} more</li>` : ''}
+        </ul>`;
+    // Measure after rendering
+    tip.style.visibility = 'hidden';
+    tip.style.display = 'block';
+    const rect = anchorEl.getBoundingClientRect();
+    const tipW = tip.offsetWidth;
+    const tipH = tip.offsetHeight;
+    const left = rect.right + 8 + tipW > window.innerWidth
+        ? rect.left - tipW - 8
+        : rect.right + 8;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top  = Math.max(8, Math.min(rect.top, window.innerHeight - tipH - 10)) + 'px';
+    tip.style.visibility = 'visible';
+}
+
+function hidePmTooltip() {
+    const tip = document.getElementById('pmTooltip');
+    tip.style.display = 'none';
+}
+
+// Delegation: left-column list
+document.getElementById('pmMrkList').addEventListener('mouseover', e => {
+    const item = e.target.closest('.am-pick-item[data-src]');
+    if (item) showPmTooltip(item, item.dataset.src, item.dataset.league);
+    else hidePmTooltip();
+});
+document.getElementById('pmMrkList').addEventListener('mouseleave', hidePmTooltip);
+
+// Delegation: detail panel slot names
+document.getElementById('pmDetail').addEventListener('mouseover', e => {
+    const span = e.target.closest('.am-pm-slot-name[data-src]');
+    if (span) showPmTooltip(span, span.dataset.src, span.dataset.league);
+    else hidePmTooltip();
+});
+document.getElementById('pmDetail').addEventListener('mouseleave', hidePmTooltip);
+
+document.getElementById('pmBulkList').addEventListener('click', e => {
+    // Skip button
+    const skip = e.target.closest('.am-pm-bulk-skip');
+    if (skip) {
+        const idx = parseInt(skip.dataset.idx, 10);
+        pmBulkSugs.splice(idx, 1);
+        renderPmBulk();
+        document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
+        return;
+    }
+});
+
+document.getElementById('btnPmBulkSave').addEventListener('click', async () => {
+    const btn = document.getElementById('btnPmBulkSave');
+    const pairs = [...pmBulkSugs];
+    if (!pairs.length) return;
+    btn.disabled = true; btn.textContent = '…';
+    let saved = 0, failed = 0;
+    for (const { mrk, max, sbt, clb } of pairs) {
+        try {
+            await saveParallelMapping(mrk, max, sbt, clb);
+            pmBulkSugs = pmBulkSugs.filter(s => s.mrk !== mrk);
+            saved++;
+        } catch {
+            failed++;
+        }
+    }
+    renderLeagueList();
+    renderSbtLeagueList();
+    renderClbLeagueList();
+    renderMbxSbtLeagueList();
+    renderMbxClbLeagueList();
+    renderSbtClbLeagueList();
+    renderPmLeft();
+    renderPmBulk();
+    btn.textContent = 'Save All';
+    btn.disabled = pmBulkSugs.length === 0;
+    if (failed > 0) toast(`Saved ${saved}, ${failed} failed`, 'warn');
+    else toast(`Bulk saved ${saved} parallel mappings`);
+});
 
 function wireSectionToggles() {
     document.querySelectorAll('.am-panel-head').forEach(head => {
