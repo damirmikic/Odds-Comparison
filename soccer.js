@@ -492,6 +492,13 @@ function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
   const TIME_WIN = 45 * 60 * 1000; // ±45 min
   const TIME_STRICT = 30 * 60 * 1000; // ±30 min for partial
 
+  // Auto-detect and correct a systematic timezone offset in maxbet's times
+  const timeOffset = detectBookieTimeOffset(merkurList, maxbetList);
+  if (timeOffset !== 0) {
+    console.info(`[maxbet] Correcting kickoff times by ${timeOffset / 3600000 > 0 ? '+' : ''}${timeOffset / 3600000}h`);
+    maxbetList = maxbetList.map(e => ({ ...e, kickOffTime: e.kickOffTime - timeOffset }));
+  }
+
   // Pre-compute normalized names for maxbet (avoid re-computing in loops)
   const mbNorm = maxbetList.map(m => ({
     home: normTeam(m.home),
@@ -621,8 +628,8 @@ function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
         kickOffTime: mk.kickOffTime,
         live: mk.live || mb.live,
         bookmakers: {
-          merkur: { odds: mk.odds, oddsCount: mk.oddsCount },
-          maxbet: { odds: mb.odds, oddsCount: mb.oddsCount },
+          merkur: { odds: mk.odds, oddsCount: mk.oddsCount, kickOffTime: mk.kickOffTime },
+          maxbet: { odds: mb.odds, oddsCount: mb.oddsCount, kickOffTime: mb.kickOffTime },
         },
         matched: true,
         matchQuality: quality,
@@ -635,7 +642,7 @@ function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
         kickOffTime: mk.kickOffTime,
         live: mk.live,
         bookmakers: {
-          merkur: { odds: mk.odds, oddsCount: mk.oddsCount },
+          merkur: { odds: mk.odds, oddsCount: mk.oddsCount, kickOffTime: mk.kickOffTime },
           maxbet: null,
         },
         matched: false,
@@ -655,7 +662,7 @@ function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
         live: mb.live,
         bookmakers: {
           merkur: null,
-          maxbet: { odds: mb.odds, oddsCount: mb.oddsCount },
+          maxbet: { odds: mb.odds, oddsCount: mb.oddsCount, kickOffTime: mb.kickOffTime },
         },
         matched: false,
         matchQuality: null,
@@ -672,10 +679,57 @@ function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
  * Sets m.bookmakers[bookieKey] = { odds, oddsCount } on each matched entry,
  * null on unmatched. Appends bookmaker-only matches at the end.
  */
+/**
+ * Detects a systematic kickoff time offset (timezone bug) in newList relative
+ * to mergedList by sampling exact name matches and computing the median delta.
+ * Returns the offset in ms to subtract from newList times, or 0 if no clear
+ * whole-hour offset is found.
+ */
+function detectBookieTimeOffset(mergedList, newList) {
+  const newNormMap = new Map();
+  newList.forEach(e => {
+    const key = `${normTeam(e.home)}|${normTeam(e.away)}`;
+    if (!newNormMap.has(key)) newNormMap.set(key, e.kickOffTime);
+  });
+
+  const deltas = [];
+  for (const mk of mergedList) {
+    const key = `${normTeam(mk.home)}|${normTeam(mk.away)}`;
+    const newTime = newNormMap.get(key);
+    if (newTime !== undefined) {
+      deltas.push(newTime - mk.kickOffTime);
+      if (deltas.length >= 20) break;
+    }
+  }
+
+  if (deltas.length < 3) return 0;
+  deltas.sort((a, b) => a - b);
+  const median = deltas[Math.floor(deltas.length / 2)];
+  const nearestHour = Math.round(median / 3600000) * 3600000;
+  // Only correct if median is close to a whole-hour multiple (within 5 min)
+  return Math.abs(median - nearestHour) < 5 * 60 * 1000 ? nearestHour : 0;
+}
+
 function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAliasMap, crossAliasMaps = {}) {
   const used = new Set();
-  const TIME_WIN = 45 * 60 * 1000;
-  const TIME_STRICT = 30 * 60 * 1000;
+
+  // If 2+ bookmakers already agree on a time for this entry, trust that consensus
+  // and allow a wider window when searching for the next bookmaker.
+  function getTimeWin(mk) {
+    const count = Object.values(mk.bookmakers).filter(b => b !== null).length;
+    return count >= 2 ? 120 * 60 * 1000 : 45 * 60 * 1000;
+  }
+  function getTimeStrict(mk) {
+    const count = Object.values(mk.bookmakers).filter(b => b !== null).length;
+    return count >= 2 ? 60 * 60 * 1000 : 30 * 60 * 1000;
+  }
+
+  // Auto-detect and correct a systematic timezone offset in this bookmaker's times
+  const timeOffset = detectBookieTimeOffset(mergedList, newList);
+  if (timeOffset !== 0) {
+    console.info(`[${bookieKey}] Correcting kickoff times by ${timeOffset / 3600000 > 0 ? '+' : ''}${timeOffset / 3600000}h`);
+    newList = newList.map(e => ({ ...e, kickOffTime: e.kickOffTime - timeOffset }));
+  }
 
   const newNorm = newList.map(m => ({
     home: normTeam(m.home),
@@ -714,10 +768,11 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
     const targetAs = activeTeamMap.get(mkA);
     if (!targetHs && !targetAs) return -1;
 
+    const tw = getTimeWin(mk);
     // With league signal first
     for (let i = 0; i < newList.length; i++) {
       if (used.has(i)) continue;
-      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
+      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > tw) continue;
       const homeMatch = targetHs ? targetHs.has(newNorm[i].home) : (mkH === newNorm[i].home);
       const awayMatch = targetAs ? targetAs.has(newNorm[i].away) : (mkA === newNorm[i].away);
       const targetLs = activeLeagueMap.get(mkL);
@@ -727,7 +782,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
     // Fallback: without league signal
     for (let i = 0; i < newList.length; i++) {
       if (used.has(i)) continue;
-      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
+      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > tw) continue;
       const homeMatch = targetHs ? targetHs.has(newNorm[i].home) : (mkH === newNorm[i].home);
       const awayMatch = targetAs ? targetAs.has(newNorm[i].away) : (mkA === newNorm[i].away);
       if (homeMatch && awayMatch) return i;
@@ -740,7 +795,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
     const key = `${normTeam(mk.home)}|${normTeam(mk.away)}`;
     for (const idx of (exactIndex[key] || [])) {
       if (used.has(idx)) continue;
-      if (Math.abs(newList[idx].kickOffTime - mk.kickOffTime) <= TIME_WIN) return idx;
+      if (Math.abs(newList[idx].kickOffTime - mk.kickOffTime) <= getTimeWin(mk)) return idx;
     }
     return -1;
   }
@@ -749,12 +804,13 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
   function findFuzzy(mk) {
     const mkH = normTeam(mk.home);
     const mkA = normTeam(mk.away);
+    const tw = getTimeWin(mk);
     let bestIdx = -1, bestScore = 0;
     newList.forEach((entry, i) => {
       if (used.has(i)) return;
-      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > TIME_WIN) return;
+      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > tw) return;
       if (fuzzyTeamMatch(mkH, newNorm[i].home) && fuzzyTeamMatch(mkA, newNorm[i].away)) {
-        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / TIME_WIN;
+        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / tw;
         if (score > bestScore) { bestScore = score; bestIdx = i; }
       }
     });
@@ -765,16 +821,17 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
   function findPartial(mk) {
     const mkH = normTeam(mk.home);
     const mkA = normTeam(mk.away);
+    const ts = getTimeStrict(mk);
     let bestIdx = -1, bestScore = 0;
     newList.forEach((entry, i) => {
       if (used.has(i)) return;
-      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > TIME_STRICT) return;
+      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > ts) return;
       const homeExact = mkH === newNorm[i].home;
       const awayExact = mkA === newNorm[i].away;
       const homeFuzz = fuzzyTeamMatch(mkH, newNorm[i].home);
       const awayFuzz = fuzzyTeamMatch(mkA, newNorm[i].away);
       if ((homeExact && awayFuzz) || (awayExact && homeFuzz)) {
-        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / TIME_STRICT;
+        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / ts;
         if (score > bestScore) { bestScore = score; bestIdx = i; }
       }
     });
@@ -790,7 +847,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
     if (idx !== -1) {
       used.add(idx);
       const entry = newList[idx];
-      return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount, fairOdds: entry.fairOdds, probs: entry.probs } } };
+      return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount, fairOdds: entry.fairOdds, probs: entry.probs, kickOffTime: entry.kickOffTime } } };
     }
     return { ...mk, bookmakers: { ...mk.bookmakers, [bookieKey]: null } };
   });
@@ -805,7 +862,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
         leagueName: entry.leagueName,
         kickOffTime: entry.kickOffTime,
         live: entry.live,
-        bookmakers: { ...emptyBks, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount, fairOdds: entry.fairOdds, probs: entry.probs } },
+        bookmakers: { ...emptyBks, [bookieKey]: { odds: entry.odds, oddsCount: entry.oddsCount, fairOdds: entry.fairOdds, probs: entry.probs, kickOffTime: entry.kickOffTime } },
         matched: false,
         matchQuality: null,
       });
@@ -813,6 +870,50 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
   });
 
   return result;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   KICKOFF TIME CONSENSUS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/**
+ * Resolves the authoritative kickoff time for a merged match.
+ *
+ * Strategy:
+ *  - Collect kickoff times from all bookmakers that are present.
+ *  - If 3+ bookmakers agree within CONSENSUS_WIN (5 min), use the median of
+ *    that group — this is the "consensus" time.
+ *  - Otherwise, fall back to the time nearest to now (most likely to be the
+ *    live/updated value when two bookmakers disagree).
+ */
+function resolveKickOffTime(match) {
+  const CONSENSUS_WIN = 5 * 60 * 1000; // 5-minute tolerance for "same" time
+
+  const times = Object.values(match.bookmakers)
+    .filter(b => b && b.kickOffTime)
+    .map(b => b.kickOffTime);
+
+  if (times.length === 0) return match.kickOffTime;
+  if (times.length === 1) return times[0];
+
+  // Find the largest group of times that agree within CONSENSUS_WIN
+  let bestGroup = [];
+  for (const t of times) {
+    const group = times.filter(t2 => Math.abs(t2 - t) <= CONSENSUS_WIN);
+    if (group.length > bestGroup.length) bestGroup = group;
+  }
+
+  // Consensus: 3+ bookmakers agree → use median of the group
+  if (bestGroup.length >= 3) {
+    bestGroup.sort((a, b) => a - b);
+    return bestGroup[Math.floor(bestGroup.length / 2)];
+  }
+
+  // Fallback: pick the time nearest to now
+  const now = Date.now();
+  return times.reduce((closest, t) =>
+    Math.abs(t - now) < Math.abs(closest - now) ? t : closest
+  , times[0]);
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1688,6 +1789,9 @@ async function loadData() {
       const cross = bk.getCrossAliasMaps ? bk.getCrossAliasMaps() : {};
       merged = mergeBookmaker(merged, parsed[i], bk.key, bk.getTeamAliasMap(), bk.getLeagueAliasMap(), cross);
     }
+    // Resolve authoritative kickoff time via consensus across bookmakers
+    merged.forEach(m => { m.kickOffTime = resolveKickOffTime(m); });
+
     allMatches = merged;
     allMatches.forEach(calculateTraderSpecs);
 
