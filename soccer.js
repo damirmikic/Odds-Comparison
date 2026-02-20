@@ -452,7 +452,7 @@ function parseCloudbetMatches(data) {
         away: event.away.name,
         leagueName,
         kickOffTime: new Date(event.cutoffTime).getTime(),
-        live: event.status === 'TRADING_LIVE',
+        live: event.status === 'TRADING_LIVE' && new Date(event.cutoffTime).getTime() <= Date.now(),
         odds,
         oddsCount: Object.keys(markets).length,
       });
@@ -807,12 +807,13 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
 function getFilteredMatches() {
   let ms = allMatches;
 
+  // Only show matches that haven't kicked off yet
+  ms = ms.filter(m => m.kickOffTime > Date.now());
+
   // View mode filter
   if (viewMode !== 'compare') ms = ms.filter(m => m.bookmakers[viewMode] !== null);
 
   // Tab filter
-  if (activeFilter === 'live') ms = ms.filter(m => m.live);
-  if (activeFilter === 'upcoming') ms = ms.filter(m => !m.live);
   if (activeFilter === 'value') {
     ms = ms.filter(m => m.valueBets && m.valueBets.length > 0)
       .sort((a, b) => b.valueBets[0].ev - a.valueBets[0].ev);
@@ -864,7 +865,7 @@ function buildSidebarTree() {
     }
     countries[c].leagues[m.leagueName].count++;
     countries[c].total++;
-    if (m.live) {
+    if (m.kickOffTime <= Date.now()) {
       countries[c].leagues[m.leagueName].live++;
       countries[c].live++;
     }
@@ -1020,7 +1021,7 @@ function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey, match
 }
 
 function renderMatch(m) {
-  const isLive = Boolean(m.live);
+  const isLive = m.kickOffTime <= Date.now();
   const timeStr = isLive ? 'LIVE' : fmtTime(m.kickOffTime);
 
   if (viewMode === 'compare') {
@@ -1200,7 +1201,7 @@ function renderRankedList(ms) {
 
   const rows = ms.map((m, i) => {
     const rank = i + 1;
-    const isLive = Boolean(m.live);
+    const isLive = m.kickOffTime <= Date.now();
     const timeStr = isLive ? 'LIVE' : fmtTime(m.kickOffTime);
     const matchHtml = isCompare
       ? renderMatchCompare(m, isLive, timeStr)
@@ -1673,7 +1674,6 @@ async function loadData() {
     }
 
     // Header stats
-    const liveN = allMatches.filter(m => m.live).length;
     const leagueN = new Set(allMatches.map(m => m.leagueName)).size;
     const matchedN = allMatches.filter(m => m.matched).length;
     const valueN = allMatches.filter(m => m.valueBets && m.valueBets.length > 0).length;
@@ -1681,13 +1681,10 @@ async function loadData() {
 
     document.getElementById('sLeagues').textContent = leagueN;
     document.getElementById('sMatches').textContent = allMatches.length;
-    document.getElementById('sLive').textContent = liveN;
     document.getElementById('sMatched').textContent = matchedN;
     document.getElementById('sValue').textContent = valueN;
     document.getElementById('sArbs').textContent = arbN;
     // We can potentially repurpose or add more stat display here later.
-
-    selectedLeague = null;
 
     renderSidebar();
     pendingFlash = true;
