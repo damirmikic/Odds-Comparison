@@ -500,12 +500,16 @@
         <section class="am-panel" id="panelParallel">
             <div class="am-panel-head">
                 <h2>Parallel League Mapping</h2>
-                <p>Select a Merkur league as anchor, review auto-suggestions for all bookmakers, then save all pairs at once.</p>
+                <p>Select a Merkur league or team as anchor, review auto-suggestions for all bookmakers, then save all pairs at once.</p>
             </div>
 
             <div class="am-pm-toolbar">
                 <button class="am-btn am-btn-primary" id="btnPmLoad">⟳ Load Data</button>
                 <input class="am-input am-search" id="pmMrkSearch" placeholder="Search Merkur leagues…" autocomplete="off" />
+                <label class="am-toggle-wrap">
+                    <input type="checkbox" id="chkPmTeamMode" />
+                    <span class="am-toggle-label">Team mode</span>
+                </label>
                 <label class="am-toggle-wrap">
                     <input type="checkbox" id="chkPmUnmappedOnly" />
                     <span class="am-toggle-label">Unmapped only</span>

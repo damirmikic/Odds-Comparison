@@ -79,8 +79,11 @@ let leagueFilterMrk = '';
 let leagueFilterMbx = '';
 
 /* ── Parallel Mapper state ─────────────────────────────────── */
-let pmLeagues    = { mrk: [], max: [], sbt: [], clb: [] };
-let pmMatches    = { mrk: {}, max: {}, sbt: {}, clb: {} }; // leagueName → [{home,away}]
+let pmLeagues     = { mrk: [], max: [], sbt: [], clb: [] };
+let pmMatches     = { mrk: {}, max: {}, sbt: {}, clb: {} }; // leagueName → [{home,away}]
+let pmTeams       = { mrk: [], max: [], sbt: [], clb: [] };
+let pmTeamLeagues = { mrk: {}, max: {}, sbt: {}, clb: {} }; // teamName → [leagueNames]
+let pmMode       = 'leagues'; // 'leagues' | 'teams'
 let pmLoaded     = false;
 let pmSelMrk     = null;
 let pmEditName   = null;
@@ -1578,12 +1581,21 @@ async function loadPmData() {
         keys.forEach((k, i) => {
             const matches = parseForBookie(k, results[i]);
             const byLeague = {};
+            const byTeam   = {};
             for (const m of matches) {
                 if (!byLeague[m.leagueName]) byLeague[m.leagueName] = [];
                 byLeague[m.leagueName].push({ home: m.home, away: m.away });
+                for (const t of [m.home, m.away]) {
+                    if (!byTeam[t]) byTeam[t] = new Set();
+                    byTeam[t].add(m.leagueName);
+                }
             }
-            pmMatches[k] = byLeague;
-            pmLeagues[k] = Object.keys(byLeague).sort((a, b) => a.localeCompare(b));
+            pmMatches[k]     = byLeague;
+            pmLeagues[k]     = Object.keys(byLeague).sort((a, b) => a.localeCompare(b));
+            pmTeamLeagues[k] = {};
+            for (const [team, leagues] of Object.entries(byTeam))
+                pmTeamLeagues[k][team] = [...leagues].sort();
+            pmTeams[k] = Object.keys(byTeam).sort((a, b) => a.localeCompare(b));
         });
         pmLoaded = true;
         pmBulkSugs = computePmBulkSuggestions();
@@ -1631,17 +1643,17 @@ function getBestPmMatch(mrkName, targetLeagues) {
 }
 
 function computePmBulkSuggestions() {
-    const mappedMrk = new Set([
-        ...getLeagueAliases().map(a => a.merkur),
-        ...getSoccerbetLeagueAliases().map(a => a.merkur),
-        ...getCloudbetLeagueAliases().map(a => a.merkur),
-    ]);
-    const list = pmLeagues.mrk.filter(n => !mappedMrk.has(n));
+    const isTeams = pmMode === 'teams';
+    const data = isTeams ? pmTeams : pmLeagues;
+    const mappedMrk = isTeams
+        ? new Set([...getTeamAliases().map(a => a.merkur), ...getSoccerbetTeamAliases().map(a => a.merkur), ...getCloudbetTeamAliases().map(a => a.merkur)])
+        : new Set([...getLeagueAliases().map(a => a.merkur), ...getSoccerbetLeagueAliases().map(a => a.merkur), ...getCloudbetLeagueAliases().map(a => a.merkur)]);
+    const list = data.mrk.filter(n => !mappedMrk.has(n));
     const results = [];
     for (const mrk of list.slice(0, 200)) {
-        const maxM = getBestPmMatch(mrk, pmLeagues.max);
-        const sbtM = getBestPmMatch(mrk, pmLeagues.sbt);
-        const clbM = getBestPmMatch(mrk, pmLeagues.clb);
+        const maxM = getBestPmMatch(mrk, data.max);
+        const sbtM = getBestPmMatch(mrk, data.sbt);
+        const clbM = getBestPmMatch(mrk, data.clb);
         if (maxM || sbtM || clbM) {
             results.push({
                 mrk,
@@ -1661,13 +1673,15 @@ function computePmBulkSuggestions() {
 
 function renderPmLeft() {
     const q = pmMrkFilter.toLowerCase();
-    let list = pmLeagues.mrk;
-    if (pmUnmappedOnly) list = list.filter(n => getPmMappedState(n) !== 'full');
+    const isTeams = pmMode === 'teams';
+    const stateGetter = isTeams ? getPmTeamMappedState : getPmMappedState;
+    let list = isTeams ? pmTeams.mrk : pmLeagues.mrk;
+    if (pmUnmappedOnly) list = list.filter(n => stateGetter(n) !== 'full');
     if (q) list = list.filter(n => n.toLowerCase().includes(q));
     document.getElementById('pmMrkCount').textContent = list.length;
     document.getElementById('pmMrkList').innerHTML = list.length
         ? list.map(n => {
-            const state = getPmMappedState(n);
+            const state = stateGetter(n);
             const badge = state === 'full'
                 ? '<div class="am-pm-mapped-badge am-pm-badge-full">mapped</div>'
                 : state === 'partial'
@@ -1679,7 +1693,7 @@ function renderPmLeft() {
               ${badge}
             </div>`;
         }).join('')
-        : `<div class="am-picker-empty">${pmLoaded ? 'No leagues found' : 'Click "Load Data" to start'}</div>`;
+        : `<div class="am-picker-empty">${pmLoaded ? `No ${isTeams ? 'teams' : 'leagues'} found` : 'Click "Load Data" to start'}</div>`;
 }
 
 function renderPmDetail() {
@@ -1689,7 +1703,13 @@ function renderPmDetail() {
         return;
     }
     const canonName = pmEditName !== null ? pmEditName : pmSelMrk;
-    const slots = [
+    const isTeams = pmMode === 'teams';
+    const targetData = isTeams ? pmTeams : pmLeagues;
+    const slots = isTeams ? [
+        { key: 'max', label: 'MaxBet',    dotCls: 'am-bk-b',  nameKey: 'maxbet',    aliasGetter: getTeamAliases },
+        { key: 'sbt', label: 'SoccerBet', dotCls: 'am-bk-s',  nameKey: 'soccerbet', aliasGetter: getSoccerbetTeamAliases },
+        { key: 'clb', label: 'Cloudbet',  dotCls: 'am-bk-cl', nameKey: 'cloudbet',  aliasGetter: getCloudbetTeamAliases },
+    ] : [
         { key: 'max', label: 'MaxBet',    dotCls: 'am-bk-b',  nameKey: 'maxbet',    aliasGetter: getLeagueAliases },
         { key: 'sbt', label: 'SoccerBet', dotCls: 'am-bk-s',  nameKey: 'soccerbet', aliasGetter: getSoccerbetLeagueAliases },
         { key: 'clb', label: 'Cloudbet',  dotCls: 'am-bk-cl', nameKey: 'cloudbet',  aliasGetter: getCloudbetLeagueAliases },
@@ -1703,7 +1723,7 @@ function renderPmDetail() {
         } else if (pmOverrides[key] !== null && pmOverrides[key] !== undefined) {
             resolved[key] = pmOverrides[key] ? { name: pmOverrides[key], score: null, existing: false } : null;
         } else {
-            const match = getBestPmMatch(pmSelMrk, pmLeagues[key]);
+            const match = getBestPmMatch(pmSelMrk, targetData[key]);
             resolved[key] = match ? { name: match.name, score: match.score, existing: false } : null;
         }
     }
@@ -1712,7 +1732,7 @@ function renderPmDetail() {
         const r = resolved[key];
         if (pmActiveSlot === key) {
             const f = pmSlotFilter.toLowerCase();
-            const options = pmLeagues[key].filter(n => !f || n.toLowerCase().includes(f));
+            const options = targetData[key].filter(n => !f || n.toLowerCase().includes(f));
             return `
               <div class="am-pm-slot am-pm-slot-open" data-slot="${key}">
                 <div class="am-pm-slot-head">
@@ -1849,7 +1869,7 @@ function renderPmBulk() {
     const container = document.getElementById('pmBulkList');
     const btn = document.getElementById('btnPmBulkSave');
     if (!pmBulkSugs.length) {
-        container.innerHTML = '<div class="am-sug-empty">No suggestions — all leagues may already be mapped</div>';
+        container.innerHTML = `<div class="am-sug-empty">No suggestions — all ${pmMode} may already be mapped</div>`;
         if (btn) btn.disabled = true;
         return;
     }
@@ -1877,34 +1897,71 @@ async function saveParallelMapping(mrkName, max, sbt, clb) {
     await Promise.all(saves);
 }
 
+async function saveParallelTeamMapping(mrkName, max, sbt, clb) {
+    const saves = [];
+    if (max) saves.push(addTeamAlias(mrkName, max));
+    if (sbt) saves.push(addSoccerbetTeamAlias(mrkName, sbt));
+    if (clb) saves.push(addCloudbetTeamAlias(mrkName, clb));
+    if (max && sbt) saves.push(addMaxbetSbtTeamAlias(max, sbt));
+    if (max && clb) saves.push(addMaxbetClbTeamAlias(max, clb));
+    if (sbt && clb) saves.push(addSbtClbTeamAlias(sbt, clb));
+    await Promise.all(saves);
+}
+
+function getPmTeamMappedState(mrkName) {
+    const hasMax = getTeamAliases().some(a => a.merkur === mrkName);
+    const hasSbt = getSoccerbetTeamAliases().some(a => a.merkur === mrkName);
+    const hasClb = getCloudbetTeamAliases().some(a => a.merkur === mrkName);
+    if (pmLoaded) {
+        const srcMax = pmTeams.max.length > 0;
+        const srcSbt = pmTeams.sbt.length > 0;
+        const srcClb = pmTeams.clb.length > 0;
+        const total  = (srcMax ? 1 : 0) + (srcSbt ? 1 : 0) + (srcClb ? 1 : 0);
+        const mapped = (srcMax && hasMax ? 1 : 0) + (srcSbt && hasSbt ? 1 : 0) + (srcClb && hasClb ? 1 : 0);
+        if (total === 0 || mapped === 0) return 'none';
+        return mapped === total ? 'full' : 'partial';
+    }
+    const count = (hasMax ? 1 : 0) + (hasSbt ? 1 : 0) + (hasClb ? 1 : 0);
+    if (count === 0) return 'none';
+    return count === 3 ? 'full' : 'partial';
+}
+
 async function onPmSave() {
     if (!pmSelMrk) return;
+    const isTeams = pmMode === 'teams';
     const mrkName = (pmEditName !== null && pmEditName.trim()) ? pmEditName.trim() : pmSelMrk;
-    const slots = [
+    const slots = isTeams ? [
+        { key: 'max', nameKey: 'maxbet',    aliasGetter: getTeamAliases },
+        { key: 'sbt', nameKey: 'soccerbet', aliasGetter: getSoccerbetTeamAliases },
+        { key: 'clb', nameKey: 'cloudbet',  aliasGetter: getCloudbetTeamAliases },
+    ] : [
         { key: 'max', nameKey: 'maxbet',    aliasGetter: getLeagueAliases },
         { key: 'sbt', nameKey: 'soccerbet', aliasGetter: getSoccerbetLeagueAliases },
         { key: 'clb', nameKey: 'cloudbet',  aliasGetter: getCloudbetLeagueAliases },
     ];
+    const targetData = isTeams ? pmTeams : pmLeagues;
     const resolved = {};
     for (const { key, nameKey, aliasGetter } of slots) {
         const existing = aliasGetter().find(a => a.merkur === pmSelMrk);
         if (existing) {
-            resolved[key] = null; // already saved, skip
+            resolved[key] = null;
         } else if (pmOverrides[key] !== null && pmOverrides[key] !== undefined) {
             resolved[key] = pmOverrides[key] || null;
         } else {
-            const match = getBestPmMatch(pmSelMrk, pmLeagues[key]);
+            const match = getBestPmMatch(pmSelMrk, targetData[key]);
             resolved[key] = match ? match.name : null;
         }
     }
     try {
-        await saveParallelMapping(mrkName, resolved.max, resolved.sbt, resolved.clb);
-        renderLeagueList();
-        renderSbtLeagueList();
-        renderClbLeagueList();
-        renderMbxSbtLeagueList();
-        renderMbxClbLeagueList();
-        renderSbtClbLeagueList();
+        if (isTeams) {
+            await saveParallelTeamMapping(mrkName, resolved.max, resolved.sbt, resolved.clb);
+            renderTeamList(); renderSbtTeamList(); renderClbTeamList();
+            renderMbxSbtTeamList(); renderMbxClbTeamList(); renderSbtClbTeamList();
+        } else {
+            await saveParallelMapping(mrkName, resolved.max, resolved.sbt, resolved.clb);
+            renderLeagueList(); renderSbtLeagueList(); renderClbLeagueList();
+            renderMbxSbtLeagueList(); renderMbxClbLeagueList(); renderSbtClbLeagueList();
+        }
         // Remove saved league from bulk suggestions
         pmBulkSugs = pmBulkSugs.filter(s => s.mrk !== pmSelMrk);
         renderPmBulk();
@@ -1936,6 +1993,21 @@ document.getElementById('pmMrkSearch').addEventListener('input', e => {
     renderPmLeft();
 });
 
+document.getElementById('chkPmTeamMode').addEventListener('change', e => {
+    pmMode = e.target.checked ? 'teams' : 'leagues';
+    pmSelMrk = null;
+    pmEditName = null;
+    pmOverrides = { max: null, sbt: null, clb: null };
+    pmActiveSlot = null;
+    pmSlotFilter = '';
+    document.getElementById('pmMrkSearch').placeholder = pmMode === 'teams' ? 'Search Merkur teams…' : 'Search Merkur leagues…';
+    pmBulkSugs = computePmBulkSuggestions();
+    renderPmLeft();
+    renderPmDetail();
+    renderPmBulk();
+    document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
+});
+
 document.getElementById('chkPmUnmappedOnly').addEventListener('change', e => {
     pmUnmappedOnly = e.target.checked;
     renderPmLeft();
@@ -1955,13 +2027,29 @@ document.getElementById('pmMrkList').addEventListener('click', e => {
 
 /* ── Parallel Map tooltip ───────────────────────────────────── */
 
-function showPmTooltip(anchorEl, srcKey, leagueName) {
-    const matches = pmMatches[srcKey] && pmMatches[srcKey][leagueName];
-    if (!matches || !matches.length) return;
+function showPmTooltip(anchorEl, srcKey, itemName) {
     const tip = document.getElementById('pmTooltip');
     const SHOW = 7;
-    const more = matches.length - SHOW;
-    tip.innerHTML = `
+    let tipHtml;
+    if (pmMode === 'teams') {
+        const leagues = pmTeamLeagues[srcKey] && pmTeamLeagues[srcKey][itemName];
+        if (!leagues || !leagues.length) return;
+        const more = leagues.length - SHOW;
+        tipHtml = `
+        <div class="am-pm-tip-head">
+            <span class="am-bk-dot ${BK_META[srcKey].dotCls}"></span>
+            <span>${BK_META[srcKey].label}</span>
+            <span class="am-pm-tip-count">${leagues.length} league${leagues.length !== 1 ? 's' : ''}</span>
+        </div>
+        <ul class="am-pm-tip-list">
+            ${leagues.slice(0, SHOW).map(l => `<li><span class="am-pm-tip-home">${esc(l)}</span></li>`).join('')}
+            ${more > 0 ? `<li class="am-pm-tip-more">…and ${more} more</li>` : ''}
+        </ul>`;
+    } else {
+        const matches = pmMatches[srcKey] && pmMatches[srcKey][itemName];
+        if (!matches || !matches.length) return;
+        const more = matches.length - SHOW;
+        tipHtml = `
         <div class="am-pm-tip-head">
             <span class="am-bk-dot ${BK_META[srcKey].dotCls}"></span>
             <span>${BK_META[srcKey].label}</span>
@@ -1971,6 +2059,8 @@ function showPmTooltip(anchorEl, srcKey, leagueName) {
             ${matches.slice(0, SHOW).map(m => `<li><span class="am-pm-tip-home">${esc(m.home)}</span> <span class="am-pm-tip-vs">vs</span> <span class="am-pm-tip-away">${esc(m.away)}</span></li>`).join('')}
             ${more > 0 ? `<li class="am-pm-tip-more">…and ${more} more</li>` : ''}
         </ul>`;
+    }
+    tip.innerHTML = tipHtml;
     // Measure after rendering
     tip.style.visibility = 'hidden';
     tip.style.display = 'block';
@@ -2024,21 +2114,24 @@ document.getElementById('btnPmBulkSave').addEventListener('click', async () => {
     if (!pairs.length) return;
     btn.disabled = true; btn.textContent = '…';
     let saved = 0, failed = 0;
+    const isTeams = pmMode === 'teams';
+    const saveFn = isTeams ? saveParallelTeamMapping : saveParallelMapping;
     for (const { mrk, max, sbt, clb } of pairs) {
         try {
-            await saveParallelMapping(mrk, max, sbt, clb);
+            await saveFn(mrk, max, sbt, clb);
             pmBulkSugs = pmBulkSugs.filter(s => s.mrk !== mrk);
             saved++;
         } catch {
             failed++;
         }
     }
-    renderLeagueList();
-    renderSbtLeagueList();
-    renderClbLeagueList();
-    renderMbxSbtLeagueList();
-    renderMbxClbLeagueList();
-    renderSbtClbLeagueList();
+    if (isTeams) {
+        renderTeamList(); renderSbtTeamList(); renderClbTeamList();
+        renderMbxSbtTeamList(); renderMbxClbTeamList(); renderSbtClbTeamList();
+    } else {
+        renderLeagueList(); renderSbtLeagueList(); renderClbLeagueList();
+        renderMbxSbtLeagueList(); renderMbxClbLeagueList(); renderSbtClbLeagueList();
+    }
     renderPmLeft();
     renderPmBulk();
     btn.textContent = 'Save All';
