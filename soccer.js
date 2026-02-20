@@ -91,8 +91,12 @@ const collapsedCountries = new Set();
 let autoRefreshInterval = null;
 let autoRefreshSeconds = 60;
 
-const prevOddsMap = new Map(); // key: home|away|leagueName|bkKey → { h, x, a, ov, un }
-let pendingFlash = false;
+const prevOddsMap      = new Map(); // key: home|away|leagueName|bkKey → { h, x, a, ov, un }
+let pendingFlash       = false;
+
+const openingOddsCache = new Map(); // match_key|bk_key → opening odds row
+const loggedDropKeys   = new Set(); // match_key|bk_key|outcome|level — session dedup
+let   dropsData        = [];        // rows from odds_drops table
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    UTILS
@@ -1230,6 +1234,64 @@ function renderRankedList(ms) {
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   RENDER — DROPS TAB
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function fmtTimeAgo(isoStr) {
+  const diffMs = Date.now() - new Date(isoStr).getTime();
+  const mins   = Math.floor(diffMs / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+}
+
+function renderDropsTab() {
+  if (!dropsData.length) {
+    return `<div class="state-center"><span class="empty-text">No drops detected yet — monitoring…</span></div>`;
+  }
+
+  const severityLabel = { weak: 'Steam', strong: 'Sharp', extreme: 'Alert' };
+  const outcomeLabel  = { h: 'Home', x: 'Draw', a: 'Away', ov: 'Over 2.5', un: 'Under 2.5' };
+  const bkLabel       = { merkur: 'MRK', maxbet: 'MAX', soccerbet: 'SBT', cloudbet: 'CLB' };
+
+  const rows = dropsData.map((r, i) => {
+    const country = parseCountry(r.league || '');
+    const lname   = parseLeagueName(r.league || '');
+    const leagueLabel = country !== 'Other'
+      ? `${getFlag(country)} ${esc(country)} · ${esc(lname)}`
+      : `${getFlag(country)} ${esc(lname || r.league || '—')}`;
+
+    return `
+      <div class="drop-item" style="animation-delay:${Math.min(i * 12, 400)}ms">
+        <div class="drop-header drop-sev-${r.severity}">
+          <span class="drop-rank">#${i + 1}</span>
+          <span class="drop-league">${leagueLabel}</span>
+          <span class="drop-sev-badge drop-sev-${r.severity}">${severityLabel[r.severity]}</span>
+        </div>
+        <div class="drop-body">
+          <div class="drop-match">
+            <span class="drop-home">${esc(r.home)}</span>
+            <span class="drop-vs">vs</span>
+            <span class="drop-away">${esc(r.away)}</span>
+          </div>
+          <div class="drop-detail">
+            <span class="drop-bk">${esc(bkLabel[r.bk_key] || r.bk_key)}</span>
+            <span class="drop-outcome">${esc(outcomeLabel[r.outcome] || r.outcome)}</span>
+            <span class="drop-odds">
+              <span class="drop-open">${r.opening_val.toFixed(2)}</span>
+              <span class="drop-arrow-icon">→</span>
+              <span class="drop-cur">${r.current_val.toFixed(2)}</span>
+            </span>
+            <span class="drop-pct drop-sev-${r.severity}">▼ ${r.drop_pct.toFixed(1)}%</span>
+            <span class="drop-time">${fmtTimeAgo(r.detected_at)}</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `<div class="drops-list">${rows}</div>`;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    RENDER — CONTENT
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function renderContent() {
@@ -1249,6 +1311,16 @@ function renderContent() {
   const cdSecs = autoRefreshSeconds > 0 ? autoRefreshSeconds : 60;
   const cdUrgent = autoRefreshSeconds <= 10 && autoRefreshSeconds > 0 ? ' urgent' : '';
   const cdHtml = `<span id="autoRefreshCountdown" class="content-countdown${cdUrgent}" title="Next auto-refresh">↺ ${cdSecs}s</span>`;
+
+  if (activeFilter === 'drops') {
+    content.innerHTML = `
+      <div class="content-bar">
+        <span class="content-crumb">Dropping Odds</span>
+        ${cdHtml}
+      </div>
+      ${renderDropsTab()}`;
+    return;
+  }
 
   if (!ms.length) {
     content.innerHTML = `
@@ -1295,6 +1367,106 @@ function triggerOddFlash(container) {
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DROPPING ODDS — SUPABASE PIPELINE
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+async function cleanupStaleData() {
+  const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const nowSec = Math.floor(Date.now() / 1000);
+  await supa.from('odds_drops').delete().lt('detected_at', cutoff);
+  await supa.from('opening_odds').delete().lt('kickoff_at', nowSec);
+}
+
+async function loadOpeningOddsCache() {
+  openingOddsCache.clear();
+  const { data } = await supa.from('opening_odds').select('*');
+  (data || []).forEach(r => openingOddsCache.set(`${r.match_key}|${r.bk_key}`, r));
+}
+
+async function saveOpeningOdds() {
+  const rows = [];
+  allMatches.forEach(m => {
+    const matchKey = `${m.home}|${m.away}|${m.leagueName}`;
+    BOOKIES.forEach(bk => {
+      if (openingOddsCache.has(`${matchKey}|${bk.key}`)) return;
+      const data = m.bookmakers[bk.key];
+      if (!data) return;
+      const o = extractOdds(data.odds);
+      if (!valid(o.h) && !valid(o.x) && !valid(o.a)) return;
+      rows.push({
+        match_key: matchKey, bk_key: bk.key,
+        h: o.h, x: o.x, a: o.a, ov: o.ov, un: o.un,
+        home: m.home, away: m.away, league: m.leagueName,
+        kickoff_at: m.kickOffTime,
+      });
+    });
+  });
+  if (!rows.length) return;
+  await supa.from('opening_odds')
+    .upsert(rows, { onConflict: 'match_key,bk_key', ignoreDuplicates: true });
+  // Add newly saved rows to cache so the same refresh can detect drops
+  rows.forEach(r => openingOddsCache.set(`${r.match_key}|${r.bk_key}`, r));
+}
+
+async function detectAndLogDrops() {
+  const outcomes = ['h', 'x', 'a', 'ov', 'un'];
+  const outcomeLabel = { h: 'Home', x: 'Draw', a: 'Away', ov: 'Over 2.5', un: 'Under 2.5' };
+  const rows = [];
+
+  allMatches.forEach(m => {
+    if (m.live) return;
+    const matchKey = `${m.home}|${m.away}|${m.leagueName}`;
+    BOOKIES.forEach(bk => {
+      const opening = openingOddsCache.get(`${matchKey}|${bk.key}`);
+      if (!opening) return;
+      const cur = extractOdds(m.bookmakers[bk.key]?.odds);
+      outcomes.forEach(outcome => {
+        const openVal = parseFloat(opening[outcome]);
+        const curVal  = cur[outcome];
+        if (!valid(openVal) || !valid(curVal) || curVal >= openVal) return;
+        const dropPct  = (openVal - curVal) / openVal * 100;
+        if (dropPct < 3) return;
+        const level    = Math.floor(dropPct / 2) * 2;
+        const dedupKey = `${matchKey}|${bk.key}|${outcome}|${level}`;
+        if (loggedDropKeys.has(dedupKey)) return;
+        loggedDropKeys.add(dedupKey);
+        const severity = dropPct >= 15 ? 'extreme' : dropPct >= 7 ? 'strong' : 'weak';
+        rows.push({
+          match_key: matchKey, bk_key: bk.key, outcome,
+          drop_level: level, opening_val: openVal, current_val: curVal,
+          drop_pct: dropPct, severity,
+          home: m.home, away: m.away, league: m.leagueName,
+          kickoff_at: m.kickOffTime,
+        });
+        if (severity !== 'weak') {
+          showToast('drop', m, { bkLabel: bk.label, outcome: outcomeLabel[outcome], dropPct, severity });
+          sendDropBrowserNotification(m, bk.label, outcomeLabel[outcome], dropPct);
+        }
+      });
+    });
+  });
+
+  if (!rows.length) return;
+  await supa.from('odds_drops')
+    .upsert(rows, { onConflict: 'match_key,bk_key,outcome,drop_level', ignoreDuplicates: true });
+}
+
+async function loadDropsData() {
+  const { data } = await supa.from('odds_drops')
+    .select('*')
+    .order('detected_at', { ascending: false });
+  return data || [];
+}
+
+function sendDropBrowserNotification(m, bkLabel, outcomeLabel, dropPct) {
+  if (document.visibilityState === 'visible') return;
+  if (Notification.permission !== 'granted') return;
+  new Notification(`📉 DROP ${bkLabel} ${outcomeLabel} −${dropPct.toFixed(1)}%`, {
+    body: `${m.home} vs ${m.away}\n${m.leagueName}`,
+  });
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ACTIONS
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function selectLeague(name) {
@@ -1335,10 +1507,20 @@ function setViewMode(mode) {
 function showToast(type, match, metric) {
   const container = document.getElementById('toastContainer');
   const div = document.createElement('div');
-  const label = type === 'arb'
-    ? `ARB +${(metric * 100).toFixed(2)}%`
-    : `VALUE  EV +${(metric * 100).toFixed(2)}%`;
-  div.className = `toast toast-${type}`;
+
+  let label, cls;
+  if (type === 'arb') {
+    label = `ARB +${(metric * 100).toFixed(2)}%`;
+    cls   = 'toast-arb';
+  } else if (type === 'value') {
+    label = `VALUE  EV +${(metric * 100).toFixed(2)}%`;
+    cls   = 'toast-value';
+  } else if (type === 'drop') {
+    label = `📉 ${esc(metric.bkLabel)}  ${esc(metric.outcome)}  −${metric.dropPct.toFixed(1)}%`;
+    cls   = `toast-drop-${metric.severity}`;
+  }
+
+  div.className = `toast ${cls}`;
   div.innerHTML = `
     <div class="toast-label">${label}</div>
     <div class="toast-match">${esc(match.home)} vs ${esc(match.away)}</div>
@@ -1477,6 +1659,18 @@ async function loadData() {
     }
     allMatches = merged;
     allMatches.forEach(calculateTraderSpecs);
+
+    // Dropping odds pipeline
+    await cleanupStaleData();
+    await loadOpeningOddsCache();
+    await saveOpeningOdds();
+    await detectAndLogDrops();
+    dropsData = await loadDropsData();
+    if (loggedDropKeys.size === 0) {
+      dropsData.forEach(r =>
+        loggedDropKeys.add(`${r.match_key}|${r.bk_key}|${r.outcome}|${r.drop_level}`)
+      );
+    }
 
     // Header stats
     const liveN = allMatches.filter(m => m.live).length;
