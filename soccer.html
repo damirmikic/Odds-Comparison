@@ -30,6 +30,7 @@
       <button class="tab" data-f="value" title="Value bets matched with Sharp bookies">💎 Value</button>
       <button class="tab" data-f="arbs" title="Arbitrage opportunities">⚖ Arbs</button>
       <button class="tab" data-f="drops" title="Dropping odds — steam detection">📉 Drops</button>
+      <button class="tab" data-f="favs" title="Starred matches and leagues">★ Favs</button>
     </nav>
 
     <!-- View mode switcher -->
@@ -65,9 +66,9 @@
         <div class="hstat matched"><span class="hstat-n" id="sMatched">—</span><span class="hstat-l">Matched</span>
         </div>
         <div class="hstat-sep"></div>
-        <div class="hstat value"><span class="hstat-n" id="sValue">—</span><span class="hstat-l">Value</span></div>
+        <div class="hstat value hstat-link" onclick="switchTab('value')" title="Show value bets"><span class="hstat-n" id="sValue">—</span><span class="hstat-l">Value</span></div>
         <div class="hstat-sep"></div>
-        <div class="hstat arbs"><span class="hstat-n" id="sArbs">—</span><span class="hstat-l">Arbs</span></div>
+        <div class="hstat arbs hstat-link" onclick="switchTab('arbs')" title="Show arb opportunities"><span class="hstat-n" id="sArbs">—</span><span class="hstat-l">Arbs</span></div>
         <div class="hstat-sep"></div>
         <a href="aliases.html" class="hstat manage" title="Manage team and league aliases">
           <span class="hstat-n">⚙</span>

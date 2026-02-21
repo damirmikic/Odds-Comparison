@@ -399,6 +399,16 @@ input {
   color: #F87171;
 }
 
+.hstat-link {
+  cursor: pointer;
+  transition: background 0.14s;
+  border-radius: 6px;
+}
+
+.hstat-link:hover {
+  background: rgba(100, 116, 139, 0.12);
+}
+
 .hstat.manage {
   text-decoration: none;
   transition: background 0.14s;
@@ -704,6 +714,83 @@ input {
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   FAVORITES
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Base star button — hidden until hovered or active */
+.fav-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, transform 0.12s;
+  flex-shrink: 0;
+}
+
+/* Reveal on parent hover, always show when favorited */
+.match-group:hover .fav-btn,
+.match-row:hover .fav-btn,
+.lb-head:hover .fav-btn,
+.fav-btn.fav-on { opacity: 1; }
+
+.fav-btn:hover { color: #FBBF24; transform: scale(1.2); }
+.fav-btn.fav-on { color: #FBBF24; }
+
+/* Place in mg-header grid (compare mode) */
+.mg-header .fav-btn {
+  grid-column: 10;
+  justify-self: center;
+}
+
+/* Position in match-row (single bookie) — absolutely to avoid grid changes */
+.match-row .fav-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+}
+
+.match-row:hover .fav-btn:hover { transform: translateY(-50%) scale(1.2); }
+
+/* League-block header star — sits between lb-right and chevron */
+.league-fav-btn {
+  font-size: 13px;
+  margin-right: -2px;
+}
+
+/* Sidebar league star */
+.sb-fav-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.league-item:hover .sb-fav-btn,
+.sb-fav-btn.fav-on { opacity: 1; }
+
+.sb-fav-btn:hover { color: #FBBF24; }
+.sb-fav-btn.fav-on { color: #FBBF24; }
+
+/* Favorited league rows — slightly brighter name, star always shows */
+.league-item.fav-league .league-item-name { color: #A0C0E0; }
+.league-item.fav-league .sb-fav-btn { opacity: 1; }
+
+/* Favs tab: star tint when active */
+.tab[data-f="favs"] { color: #D4A017; }
+.tab[data-f="favs"].active { color: #FBBF24; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    MAIN CONTENT
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 .content {
@@ -749,6 +836,53 @@ input {
   color: var(--muted);
   letter-spacing: 0.3px;
 }
+
+/* Content-area tab search (Drops / Value / Arbs bars) */
+.content-tab-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 auto;
+}
+
+.cts-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.cts-input {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  padding: 5px 26px 5px 28px;
+  width: 220px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.cts-input:focus {
+  border-color: var(--green);
+  background: rgba(0, 232, 122, 0.04);
+}
+
+.cts-input::placeholder { color: var(--muted); }
+
+.cts-clear {
+  position: absolute;
+  right: 7px;
+  font-size: 10px;
+  color: var(--muted);
+  padding: 3px;
+  transition: color 0.12s;
+}
+
+.cts-clear:hover { color: var(--text); }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    LEAGUE BLOCK
@@ -2027,6 +2161,29 @@ input {
 .drop-pct.drop-sev-weak    { color: #60A5FA; }
 .drop-pct.drop-sev-strong  { color: var(--amber); }
 .drop-pct.drop-sev-extreme { color: #F87171; }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SPARKLINES (odds movement mini-charts)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Wrapper div placed as the last child of .bk-row — spans cols 8 to end */
+.bk-spark-cell {
+  grid-column: 8 / -1;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+
+.bk-row:hover .bk-spark-cell {
+  opacity: 1;
+}
+
+/* Hide sparklines at viewport sizes where cols 8-9 collapse to 0 */
+@media (max-width: 760px) {
+  .bk-spark-cell { display: none; }
+}
 
 .drop-time {
   font-size: 10px;

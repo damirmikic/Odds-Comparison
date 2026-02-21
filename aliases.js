@@ -73,6 +73,11 @@ async function loadAliasDB() {
     }
 }
 
+async function reloadAliasDB() {
+    _dbLoaded = false;
+    await loadAliasDB();
+}
+
 /* ── Accessors ─────────────────────────────────────────────── */
 function getTeamAliases()            { return [..._db.teams]; }
 function getLeagueAliases()          { return [..._db.leagues]; }
@@ -211,11 +216,11 @@ async function addSoccerbetTeamAlias(merkurName, soccerbetName) {
 
     const { data, error } = await supa
         .from('soccerbet_team_aliases')
-        .insert([{ merkur: merkurName, soccerbet: soccerbetName }])
+        .upsert([{ merkur: merkurName, soccerbet: soccerbetName }], { onConflict: 'merkur,soccerbet', ignoreDuplicates: true })
         .select();
 
     if (error) { console.error('[aliases] Add soccerbet team error:', error.message); throw error; }
-    _db.soccerbetTeams.push(data[0]);
+    if (data && data[0]) _db.soccerbetTeams.push(data[0]);
 }
 
 async function removeSoccerbetTeamAlias(merkurName, soccerbetName) {
@@ -308,9 +313,9 @@ async function removeCloudbetLeagueAlias(merkurLeague, cloudbetLeague) {
 
 async function addMaxbetSbtTeamAlias(maxbetName, sbtName) {
     if (_db.mbxSbtTeams.some(a => a.maxbet === maxbetName && a.soccerbet === sbtName)) return;
-    const { data, error } = await supa.from('maxbet_soccerbet_team_aliases').insert([{ maxbet: maxbetName, soccerbet: sbtName }]).select();
+    const { data, error } = await supa.from('maxbet_soccerbet_team_aliases').upsert([{ maxbet: maxbetName, soccerbet: sbtName }], { onConflict: 'maxbet,soccerbet', ignoreDuplicates: true }).select();
     if (error) { console.error('[aliases] Add mbx-sbt team error:', error.message); throw error; }
-    _db.mbxSbtTeams.push(data[0]);
+    if (data && data[0]) _db.mbxSbtTeams.push(data[0]);
 }
 
 async function removeMaxbetSbtTeamAlias(maxbetName, sbtName) {
@@ -334,9 +339,9 @@ async function removeMaxbetSbtLeagueAlias(maxbetLeague, sbtLeague) {
 
 async function addMaxbetClbTeamAlias(maxbetName, clbName) {
     if (_db.mbxClbTeams.some(a => a.maxbet === maxbetName && a.cloudbet === clbName)) return;
-    const { data, error } = await supa.from('maxbet_cloudbet_team_aliases').insert([{ maxbet: maxbetName, cloudbet: clbName }]).select();
+    const { data, error } = await supa.from('maxbet_cloudbet_team_aliases').upsert([{ maxbet: maxbetName, cloudbet: clbName }], { onConflict: 'maxbet,cloudbet', ignoreDuplicates: true }).select();
     if (error) { console.error('[aliases] Add mbx-clb team error:', error.message); throw error; }
-    _db.mbxClbTeams.push(data[0]);
+    if (data && data[0]) _db.mbxClbTeams.push(data[0]);
 }
 
 async function removeMaxbetClbTeamAlias(maxbetName, clbName) {
@@ -360,9 +365,9 @@ async function removeMaxbetClbLeagueAlias(maxbetLeague, clbLeague) {
 
 async function addSbtClbTeamAlias(sbtName, clbName) {
     if (_db.sbtClbTeams.some(a => a.soccerbet === sbtName && a.cloudbet === clbName)) return;
-    const { data, error } = await supa.from('soccerbet_cloudbet_team_aliases').insert([{ soccerbet: sbtName, cloudbet: clbName }]).select();
+    const { data, error } = await supa.from('soccerbet_cloudbet_team_aliases').upsert([{ soccerbet: sbtName, cloudbet: clbName }], { onConflict: 'soccerbet,cloudbet', ignoreDuplicates: true }).select();
     if (error) { console.error('[aliases] Add sbt-clb team error:', error.message); throw error; }
-    _db.sbtClbTeams.push(data[0]);
+    if (data && data[0]) _db.sbtClbTeams.push(data[0]);
 }
 
 async function removeSbtClbTeamAlias(sbtName, clbName) {

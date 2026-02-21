@@ -33,8 +33,8 @@ const BOOKIES = [
     key: 'cloudbet', label: 'CLB', cls: 'cl',
     url: () => {
       const now = Math.floor(Date.now() / 1000);
-      const to = now + 7 * 24 * 3600;
-      return `https://sports-api.cloudbet.com/pub/v2/odds/events?sport=soccer&live=false&from=${now}&to=${to}&markets=soccer.match_odds&markets=soccer.total_goals&players=false&limit=2000`;
+      const to = now + CONFIG.CLOUDBET_LOOKAHEAD_DAYS * 24 * 3600;
+      return `https://sports-api.cloudbet.com/pub/v2/odds/events?sport=soccer&live=false&from=${now}&to=${to}&markets=soccer.match_odds&markets=soccer.total_goals&players=false&limit=${CONFIG.CLOUDBET_LIMIT}`;
     },
     headers: { 'X-API-Key': 'eyJhbGciOiJSUzI1NiIsImtpZCI6IkhKcDkyNnF3ZXBjNnF3LU9rMk4zV05pXzBrRFd6cEdwTzAxNlRJUjdRWDAiLCJ0eXAiOiJKV1QifQ.eyJhY2Nlc3NfdGllciI6InRyYWRpbmciLCJleHAiOjIwNjE1Mzc1MDIsImlhdCI6MTc0NjE3NzUwMiwianRpIjoiNTU1ODk0NjgtZjJhZi00ZGQ3LWE3MTQtZjNiNjgyMWU4OGRkIiwic3ViIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3IiwidGVuYW50IjoiY2xvdWRiZXQiLCJ1dWlkIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3In0.BW_nXSwTkxTI7C-1UzgxWLnNzo9Bo1Ed8hI9RfVLnrJa6sfsMyvQ1NrtT5t6i_emwhkRHU1hY-9i6c2c5AI4fc2mRLSNBujvrfbVHX67uB58E8TeSOZUBRi0eqfLBL7sYl1JNPZzhFkDBCBNFJZJpn40FIjIrtIiPd-G5ClaaSMRWrFUDiwA1NmyxHSfkfRpeRSnfk15qck7zSIeNeITzPbD7kZGDIeStmcHuiHfcQX3NaHaI0gyw60wmDgan83NpYQYRVLQ9C4icbNhel4n5H5FGFAxQS8IcvynqV8f-vz2t4BRGuYXBU8uhdYKgezhyQrSvX6NpwNPBJC8CWo2fA' },
     parse: data => parseCloudbetMatches(data),
@@ -78,6 +78,50 @@ const FLAGS = {
 };
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TUNING CONSTANTS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+const CONFIG = {
+  // Merge time windows (mergeMatches — Merkur vs MaxBet)
+  MERGE_TIME_WIN:    45 * 60 * 1000,  // ±45 min for exact/fuzzy passes
+  MERGE_TIME_STRICT: 30 * 60 * 1000,  // ±30 min for partial pass
+
+  // Merge time windows (mergeBookmaker — when 2+ bookies already agree, use wider window)
+  MERGE_TIME_WIN_CONSENSUS:    120 * 60 * 1000,  // ±120 min (consensus)
+  MERGE_TIME_STRICT_CONSENSUS:  60 * 60 * 1000,  // ±60 min (consensus partial)
+
+  // Timezone offset detection
+  TIMEZONE_SAMPLE_SIZE: 20,           // max samples for median computation
+  TIMEZONE_TOLERANCE:   5 * 60 * 1000, // within 5 min of a whole hour = correction
+
+  // Kickoff time consensus (resolveKickOffTime)
+  CONSENSUS_WIN: 5 * 60 * 1000,       // 5-minute tolerance for "same" time
+
+  // Fuzzy team matching
+  JACCARD_THRESHOLD: 0.5,             // minimum Jaccard score for a fuzzy match
+
+  // Value bet detection
+  VALUE_MIN_EV: 0.01,                 // minimum expected value edge (1%)
+
+  // Drop detection thresholds
+  DROP_MIN_PCT:     3,                // ignore drops below 3%
+  DROP_STRONG_PCT:  7,                // ≥7% = strong
+  DROP_EXTREME_PCT: 15,               // ≥15% = extreme
+
+  // Stale data cleanup
+  STALE_DATA_HOURS: 3,                // delete odds_drops older than 3 hours
+
+  // Cloudbet API
+  CLOUDBET_LOOKAHEAD_DAYS: 7,         // days ahead to fetch
+  CLOUDBET_LIMIT: 2000,               // max events per request
+
+  // Auto-refresh
+  AUTO_REFRESH_SECS: 60,             // seconds between automatic data refreshes
+
+  // Odds history for mini-charts
+  ODDS_HISTORY_SIZE: 10,             // rolling window size (snapshots)
+};
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    STATE
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 let allMatches = [];   // merged match objects
@@ -89,14 +133,59 @@ let viewMode = 'compare'; // 'compare' | 'merkur' | 'maxbet' | 'soccerbet'
 const collapsedCountries = new Set();
 
 let autoRefreshInterval = null;
-let autoRefreshSeconds = 60;
+let autoRefreshSeconds = CONFIG.AUTO_REFRESH_SECS;
 
 const prevOddsMap      = new Map(); // key: home|away|leagueName|bkKey → { h, x, a, ov, un }
+const oddsHistory      = new Map(); // key: matchKey|bkKey → { h:[], x:[], a:[] } rolling window
 let pendingFlash       = false;
 
 const openingOddsCache = new Map(); // match_key|bk_key → opening odds row
 const loggedDropKeys   = new Set(); // match_key|bk_key|outcome|level — session dedup
 let   dropsData        = [];        // rows from odds_drops table
+let   dropsSearchQuery = '';        // filter text for the Drops tab
+
+const favMatches = new Set(); // "home|away|leagueName" keys
+const favLeagues = new Set(); // leagueName strings
+
+function loadFavs() {
+  try {
+    const m = JSON.parse(localStorage.getItem('favMatches') || '[]');
+    const l = JSON.parse(localStorage.getItem('favLeagues') || '[]');
+    m.forEach(k => favMatches.add(k));
+    l.forEach(k => favLeagues.add(k));
+  } catch { /* ignore corrupt storage */ }
+}
+
+function saveFavs() {
+  localStorage.setItem('favMatches', JSON.stringify([...favMatches]));
+  localStorage.setItem('favLeagues', JSON.stringify([...favLeagues]));
+}
+
+function loadCollapsed() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('collapsedCountries') || '[]');
+    saved.forEach(c => collapsedCountries.add(c));
+  } catch { /* ignore corrupt storage */ }
+}
+
+function saveCollapsed() {
+  localStorage.setItem('collapsedCountries', JSON.stringify([...collapsedCountries]));
+}
+
+function toggleFavMatch(key) {
+  if (favMatches.has(key)) favMatches.delete(key);
+  else favMatches.add(key);
+  saveFavs();
+  renderContent();
+}
+
+function toggleFavLeague(name) {
+  if (favLeagues.has(name)) favLeagues.delete(name);
+  else favLeagues.add(name);
+  saveFavs();
+  renderSidebar();
+  renderContent();
+}
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    UTILS
@@ -225,7 +314,7 @@ function calculateTraderSpecs(m) {
           const prob = fair[outcome];
           if (prob > 0 && valid(bkOdds[outcome])) {
             const ev = bkOdds[outcome] * prob;
-            if (ev > 1.01) { // 1% minimum edge
+            if (ev > 1 + CONFIG.VALUE_MIN_EV) { // minimum expected value edge
               m.valueBets.push({ bk: bkKey, outcome, odd: bkOdds[outcome], fair: 1 / prob, ev: ev - 1 });
             }
           }
@@ -326,7 +415,7 @@ function fuzzyTeamMatch(normA, normB) {
   // Token overlap
   const tokA = tokenize(normA);
   const tokB = tokenize(normB);
-  return jaccard(tokA, tokB) >= 0.5;
+  return jaccard(tokA, tokB) >= CONFIG.JACCARD_THRESHOLD;
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -476,6 +565,107 @@ function parseCloudbetMatches(data) {
 }
 
 /**
+ * Unified 4-pass fuzzy match finder used by both mergeMatches and mergeBookmaker.
+ *
+ * Pass 0 — Alias (from Supabase alias DB, with optional cross-bookie fallback)
+ * Pass 1 — Exact normalized home|away key, within getWin(mk)
+ * Pass 2 — Fuzzy both sides (substring / token Jaccard), within getWin(mk)
+ * Pass 3 — Partial (one exact side + one fuzzy), within getStrict(mk)
+ *
+ * @param {object}   mk            Left-side match to find a partner for
+ * @param {Array}    targetList    Candidate matches on the right side
+ * @param {Array}    targetNorm    Normalized {home,away,league} for each candidate
+ * @param {object}   exactIndex    {normHome|normAway → [indices]} lookup
+ * @param {Set}      used          Already-claimed indices in targetList
+ * @param {Function} getWin        mk → ms time window for passes 0–2
+ * @param {Function} getStrict     mk → ms time window for pass 3 (partial)
+ * @param {Map}      teamMap       Alias map: normName → Set<normTargetName>
+ * @param {Map}      leagueMap     Alias map: normLeague → Set<normTargetLeague>
+ * @param {object}   crossAliasMaps  Optional {bkKey:{team,league}} for cross-bookie fallback
+ * @returns {{idx:number, quality:string|null}}
+ */
+function findMatch(mk, targetList, targetNorm, exactIndex, used, getWin, getStrict, teamMap, leagueMap, crossAliasMaps = {}) {
+  const mkH = normTeam(mk.home);
+  const mkA = normTeam(mk.away);
+  const mkL = normLeague(mk.leagueName);
+  const tw = getWin(mk);
+  const ts = getStrict(mk);
+
+  // ── Pass 0: Alias ──────────────────────────────────────────────────────────
+  // When merkur is absent from a merged entry, fall back to a cross-bookie alias map
+  let activeTeamMap = teamMap;
+  let activeLeagueMap = leagueMap;
+  if (!mk.bookmakers?.merkur) {
+    for (const [bk, maps] of Object.entries(crossAliasMaps)) {
+      if (mk.bookmakers?.[bk] !== null) {
+        activeTeamMap = maps.team;
+        activeLeagueMap = maps.league;
+        break;
+      }
+    }
+  }
+  const targetHs = activeTeamMap.get(mkH);
+  const targetAs = activeTeamMap.get(mkA);
+  if (targetHs || targetAs) {
+    // With league signal first
+    for (let i = 0; i < targetList.length; i++) {
+      if (used.has(i)) continue;
+      if (Math.abs(targetList[i].kickOffTime - mk.kickOffTime) > tw) continue;
+      const homeMatch = targetHs ? targetHs.has(targetNorm[i].home) : (mkH === targetNorm[i].home);
+      const awayMatch = targetAs ? targetAs.has(targetNorm[i].away) : (mkA === targetNorm[i].away);
+      const targetLs = activeLeagueMap.get(mkL);
+      const leagueMatch = (targetLs && targetLs.has(targetNorm[i].league)) || (mkL === targetNorm[i].league);
+      if (homeMatch && awayMatch && leagueMatch) return { idx: i, quality: 'alias' };
+    }
+    // Fallback: without league signal
+    for (let i = 0; i < targetList.length; i++) {
+      if (used.has(i)) continue;
+      if (Math.abs(targetList[i].kickOffTime - mk.kickOffTime) > tw) continue;
+      const homeMatch = targetHs ? targetHs.has(targetNorm[i].home) : (mkH === targetNorm[i].home);
+      const awayMatch = targetAs ? targetAs.has(targetNorm[i].away) : (mkA === targetNorm[i].away);
+      if (homeMatch && awayMatch) return { idx: i, quality: 'alias' };
+    }
+  }
+
+  // ── Pass 1: Exact normalized key ────────────────────────────────────────────
+  const key1 = `${mkH}|${mkA}`;
+  for (const idx of (exactIndex[key1] || [])) {
+    if (used.has(idx)) continue;
+    if (Math.abs(targetList[idx].kickOffTime - mk.kickOffTime) <= tw) return { idx, quality: 'exact' };
+  }
+
+  // ── Pass 2: Fuzzy both sides ────────────────────────────────────────────────
+  let bestIdx = -1, bestScore = 0;
+  targetList.forEach((entry, i) => {
+    if (used.has(i)) return;
+    if (Math.abs(entry.kickOffTime - mk.kickOffTime) > tw) return;
+    if (fuzzyTeamMatch(mkH, targetNorm[i].home) && fuzzyTeamMatch(mkA, targetNorm[i].away)) {
+      const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / tw;
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+  });
+  if (bestIdx !== -1) return { idx: bestIdx, quality: 'fuzzy' };
+
+  // ── Pass 3: Partial (one side exact, other fuzzy) ───────────────────────────
+  bestIdx = -1; bestScore = 0;
+  targetList.forEach((entry, i) => {
+    if (used.has(i)) return;
+    if (Math.abs(entry.kickOffTime - mk.kickOffTime) > ts) return;
+    const homeExact = mkH === targetNorm[i].home;
+    const awayExact = mkA === targetNorm[i].away;
+    const homeFuzz = fuzzyTeamMatch(mkH, targetNorm[i].home);
+    const awayFuzz = fuzzyTeamMatch(mkA, targetNorm[i].away);
+    if ((homeExact && awayFuzz) || (awayExact && homeFuzz)) {
+      const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / ts;
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+  });
+  if (bestIdx !== -1) return { idx: bestIdx, quality: 'partial' };
+
+  return { idx: -1, quality: null };
+}
+
+/**
  * Merge merkur (canonical) and maxbet lists using 4-pass fuzzy matching.
  * teamAliasMap / leagueAliasMap come from BOOKIES[1] config.
  *
@@ -489,8 +679,8 @@ function parseCloudbetMatches(data) {
 function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
   const merged = [];
   const usedMb = new Set();
-  const TIME_WIN = 45 * 60 * 1000; // ±45 min
-  const TIME_STRICT = 30 * 60 * 1000; // ±30 min for partial
+  const TIME_WIN = CONFIG.MERGE_TIME_WIN;
+  const TIME_STRICT = CONFIG.MERGE_TIME_STRICT;
 
   // Auto-detect and correct a systematic timezone offset in maxbet's times
   const timeOffset = detectBookieTimeOffset(merkurList, maxbetList);
@@ -506,47 +696,10 @@ function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
     league: normLeague(m.leagueName),
   }));
 
-  // ── PASS 0: Alias matching ──────────────────────────────
-  function findAlias(mk) {
-    const mkH = normTeam(mk.home);
-    const mkA = normTeam(mk.away);
-    const mkL = normLeague(mk.leagueName);
+  const getWin = () => TIME_WIN;
+  const getStrict = () => TIME_STRICT;
 
-    // Get the expected MaxBet names from aliases (now Sets)
-    const targetHs = teamAliasMap.get(mkH);
-    const targetAs = teamAliasMap.get(mkA);
-
-    if (!targetHs && !targetAs) return -1;
-
-    for (let i = 0; i < maxbetList.length; i++) {
-      if (usedMb.has(i)) continue;
-      const mb = maxbetList[i];
-      if (Math.abs(mb.kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
-
-      const homeMatch = targetHs ? targetHs.has(mbNorm[i].home) : (mkH === mbNorm[i].home);
-      const awayMatch = targetAs ? targetAs.has(mbNorm[i].away) : (mkA === mbNorm[i].away);
-
-      // League signal: if leagues are also aliased (now Set) or exact, it's a perfect hit
-      const targetLs = leagueAliasMap.get(mkL);
-      const leagueMatch = (targetLs && targetLs.has(mbNorm[i].league)) || (mkL === mbNorm[i].league);
-
-      if (homeMatch && awayMatch) {
-        if (leagueMatch) return i;
-      }
-    }
-    // Fallback pass for aliases without league signal
-    for (let i = 0; i < maxbetList.length; i++) {
-      if (usedMb.has(i)) continue;
-      const mb = maxbetList[i];
-      if (Math.abs(mb.kickOffTime - mk.kickOffTime) > TIME_WIN) continue;
-      const homeMatch = targetHs ? targetHs.has(mbNorm[i].home) : (mkH === mbNorm[i].home);
-      const awayMatch = targetAs ? targetAs.has(mbNorm[i].away) : (mkA === mbNorm[i].away);
-      if (homeMatch && awayMatch) return i;
-    }
-    return -1;
-  }
-
-  // ── PASS 1: exact normalized key index ──────────────────────────
+  // ── Exact-key index for Pass 1 ───────────────────────────────────
   const exactIndex = {};
   maxbetList.forEach((m, i) => {
     const key = `${mbNorm[i].home}|${mbNorm[i].away}`;
@@ -554,68 +707,9 @@ function mergeMatches(merkurList, maxbetList, teamAliasMap, leagueAliasMap) {
     exactIndex[key].push(i);
   });
 
-  function findExact(mk) {
-    const mkH = normTeam(mk.home);
-    const mkA = normTeam(mk.away);
-    const key = `${mkH}|${mkA}`;
-    for (const idx of (exactIndex[key] || [])) {
-      if (usedMb.has(idx)) continue;
-      if (Math.abs(maxbetList[idx].kickOffTime - mk.kickOffTime) <= TIME_WIN) return idx;
-    }
-    return -1;
-  }
-
-  // ── PASS 2: fuzzy both sides ─────────────────────────────────────
-  function findFuzzy(mk) {
-    const mkH = normTeam(mk.home);
-    const mkA = normTeam(mk.away);
-    let bestIdx = -1;
-    let bestScore = 0;
-    maxbetList.forEach((mb, i) => {
-      if (usedMb.has(i)) return;
-      if (Math.abs(mb.kickOffTime - mk.kickOffTime) > TIME_WIN) return;
-      const homeMatch = fuzzyTeamMatch(mkH, mbNorm[i].home);
-      const awayMatch = fuzzyTeamMatch(mkA, mbNorm[i].away);
-      if (homeMatch && awayMatch) {
-        // Score by time proximity (closer = better)
-        const score = 1 - Math.abs(mb.kickOffTime - mk.kickOffTime) / TIME_WIN;
-        if (score > bestScore) { bestScore = score; bestIdx = i; }
-      }
-    });
-    return bestIdx;
-  }
-
-  // ── PASS 3: partial match (one side exact, other fuzzy) ──────────
-  function findPartial(mk) {
-    const mkH = normTeam(mk.home);
-    const mkA = normTeam(mk.away);
-    let bestIdx = -1;
-    let bestScore = 0;
-    maxbetList.forEach((mb, i) => {
-      if (usedMb.has(i)) return;
-      if (Math.abs(mb.kickOffTime - mk.kickOffTime) > TIME_STRICT) return;
-      const homeExact = mkH === mbNorm[i].home;
-      const awayExact = mkA === mbNorm[i].away;
-      const homeFuzz = fuzzyTeamMatch(mkH, mbNorm[i].home);
-      const awayFuzz = fuzzyTeamMatch(mkA, mbNorm[i].away);
-      // Require at least one exact side + other fuzzy, or both fuzzy with high confidence
-      const ok = (homeExact && awayFuzz) || (awayExact && homeFuzz);
-      if (ok) {
-        const score = 1 - Math.abs(mb.kickOffTime - mk.kickOffTime) / TIME_STRICT;
-        if (score > bestScore) { bestScore = score; bestIdx = i; }
-      }
-    });
-    return bestIdx;
-  }
-
   // ── Main merge loop ──────────────────────────────────────────────
   for (const mk of merkurList) {
-    let idx = findAlias(mk);
-    let quality = 'alias';
-
-    if (idx === -1) { idx = findExact(mk); quality = 'exact'; }
-    if (idx === -1) { idx = findFuzzy(mk); quality = 'fuzzy'; }
-    if (idx === -1) { idx = findPartial(mk); quality = 'partial'; }
+    const { idx, quality } = findMatch(mk, maxbetList, mbNorm, exactIndex, usedMb, getWin, getStrict, teamAliasMap, leagueAliasMap);
 
     if (idx !== -1) {
       usedMb.add(idx);
@@ -698,7 +792,7 @@ function detectBookieTimeOffset(mergedList, newList) {
     const newTime = newNormMap.get(key);
     if (newTime !== undefined) {
       deltas.push(newTime - mk.kickOffTime);
-      if (deltas.length >= 20) break;
+      if (deltas.length >= CONFIG.TIMEZONE_SAMPLE_SIZE) break;
     }
   }
 
@@ -706,8 +800,8 @@ function detectBookieTimeOffset(mergedList, newList) {
   deltas.sort((a, b) => a - b);
   const median = deltas[Math.floor(deltas.length / 2)];
   const nearestHour = Math.round(median / 3600000) * 3600000;
-  // Only correct if median is close to a whole-hour multiple (within 5 min)
-  return Math.abs(median - nearestHour) < 5 * 60 * 1000 ? nearestHour : 0;
+  // Only correct if median is close to a whole-hour multiple
+  return Math.abs(median - nearestHour) < CONFIG.TIMEZONE_TOLERANCE ? nearestHour : 0;
 }
 
 function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAliasMap, crossAliasMaps = {}) {
@@ -717,11 +811,11 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
   // and allow a wider window when searching for the next bookmaker.
   function getTimeWin(mk) {
     const count = Object.values(mk.bookmakers).filter(b => b !== null).length;
-    return count >= 2 ? 120 * 60 * 1000 : 45 * 60 * 1000;
+    return count >= 2 ? CONFIG.MERGE_TIME_WIN_CONSENSUS : CONFIG.MERGE_TIME_WIN;
   }
   function getTimeStrict(mk) {
     const count = Object.values(mk.bookmakers).filter(b => b !== null).length;
-    return count >= 2 ? 60 * 60 * 1000 : 30 * 60 * 1000;
+    return count >= 2 ? CONFIG.MERGE_TIME_STRICT_CONSENSUS : CONFIG.MERGE_TIME_STRICT;
   }
 
   // Auto-detect and correct a systematic timezone offset in this bookmaker's times
@@ -745,104 +839,8 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
     exactIndex[key].push(i);
   });
 
-  // ── Pass 0: Alias matching ──────────────────────────────────
-  function findAlias(mk) {
-    const mkH = normTeam(mk.home);
-    const mkA = normTeam(mk.away);
-    const mkL = normLeague(mk.leagueName);
-
-    // When merkur is absent, check cross-bookie maps for the first other present bookie
-    let activeTeamMap = teamAliasMap;
-    let activeLeagueMap = leagueAliasMap;
-    if (!mk.bookmakers.merkur) {
-      for (const [bk, maps] of Object.entries(crossAliasMaps)) {
-        if (mk.bookmakers[bk] !== null) {
-          activeTeamMap = maps.team;
-          activeLeagueMap = maps.league;
-          break;
-        }
-      }
-    }
-
-    const targetHs = activeTeamMap.get(mkH);
-    const targetAs = activeTeamMap.get(mkA);
-    if (!targetHs && !targetAs) return -1;
-
-    const tw = getTimeWin(mk);
-    // With league signal first
-    for (let i = 0; i < newList.length; i++) {
-      if (used.has(i)) continue;
-      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > tw) continue;
-      const homeMatch = targetHs ? targetHs.has(newNorm[i].home) : (mkH === newNorm[i].home);
-      const awayMatch = targetAs ? targetAs.has(newNorm[i].away) : (mkA === newNorm[i].away);
-      const targetLs = activeLeagueMap.get(mkL);
-      const leagueMatch = (targetLs && targetLs.has(newNorm[i].league)) || (mkL === newNorm[i].league);
-      if (homeMatch && awayMatch && leagueMatch) return i;
-    }
-    // Fallback: without league signal
-    for (let i = 0; i < newList.length; i++) {
-      if (used.has(i)) continue;
-      if (Math.abs(newList[i].kickOffTime - mk.kickOffTime) > tw) continue;
-      const homeMatch = targetHs ? targetHs.has(newNorm[i].home) : (mkH === newNorm[i].home);
-      const awayMatch = targetAs ? targetAs.has(newNorm[i].away) : (mkA === newNorm[i].away);
-      if (homeMatch && awayMatch) return i;
-    }
-    return -1;
-  }
-
-  // ── Pass 1: Exact normalized key ────────────────────────────
-  function findExact(mk) {
-    const key = `${normTeam(mk.home)}|${normTeam(mk.away)}`;
-    for (const idx of (exactIndex[key] || [])) {
-      if (used.has(idx)) continue;
-      if (Math.abs(newList[idx].kickOffTime - mk.kickOffTime) <= getTimeWin(mk)) return idx;
-    }
-    return -1;
-  }
-
-  // ── Pass 2: Fuzzy both sides ────────────────────────────────
-  function findFuzzy(mk) {
-    const mkH = normTeam(mk.home);
-    const mkA = normTeam(mk.away);
-    const tw = getTimeWin(mk);
-    let bestIdx = -1, bestScore = 0;
-    newList.forEach((entry, i) => {
-      if (used.has(i)) return;
-      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > tw) return;
-      if (fuzzyTeamMatch(mkH, newNorm[i].home) && fuzzyTeamMatch(mkA, newNorm[i].away)) {
-        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / tw;
-        if (score > bestScore) { bestScore = score; bestIdx = i; }
-      }
-    });
-    return bestIdx;
-  }
-
-  // ── Pass 3: Partial (one side exact, other fuzzy) ───────────
-  function findPartial(mk) {
-    const mkH = normTeam(mk.home);
-    const mkA = normTeam(mk.away);
-    const ts = getTimeStrict(mk);
-    let bestIdx = -1, bestScore = 0;
-    newList.forEach((entry, i) => {
-      if (used.has(i)) return;
-      if (Math.abs(entry.kickOffTime - mk.kickOffTime) > ts) return;
-      const homeExact = mkH === newNorm[i].home;
-      const awayExact = mkA === newNorm[i].away;
-      const homeFuzz = fuzzyTeamMatch(mkH, newNorm[i].home);
-      const awayFuzz = fuzzyTeamMatch(mkA, newNorm[i].away);
-      if ((homeExact && awayFuzz) || (awayExact && homeFuzz)) {
-        const score = 1 - Math.abs(entry.kickOffTime - mk.kickOffTime) / ts;
-        if (score > bestScore) { bestScore = score; bestIdx = i; }
-      }
-    });
-    return bestIdx;
-  }
-
   const result = mergedList.map(mk => {
-    let idx = findAlias(mk);
-    if (idx === -1) idx = findExact(mk);
-    if (idx === -1) idx = findFuzzy(mk);
-    if (idx === -1) idx = findPartial(mk);
+    const { idx } = findMatch(mk, newList, newNorm, exactIndex, used, getTimeWin, getTimeStrict, teamAliasMap, leagueAliasMap, crossAliasMaps);
 
     if (idx !== -1) {
       used.add(idx);
@@ -887,7 +885,7 @@ function mergeBookmaker(mergedList, newList, bookieKey, teamAliasMap, leagueAlia
  *    live/updated value when two bookmakers disagree).
  */
 function resolveKickOffTime(match) {
-  const CONSENSUS_WIN = 5 * 60 * 1000; // 5-minute tolerance for "same" time
+  const CONSENSUS_WIN = CONFIG.CONSENSUS_WIN;
 
   const times = Object.values(match.bookmakers)
     .filter(b => b && b.kickOffTime)
@@ -936,6 +934,12 @@ function getFilteredMatches() {
   if (activeFilter === 'arbs') {
     ms = ms.filter(m => m.arb)
       .sort((a, b) => b.arb.roi - a.arb.roi);
+  }
+  if (activeFilter === 'favs') {
+    ms = ms.filter(m => {
+      const key = `${m.home}|${m.away}|${m.leagueName}`;
+      return favMatches.has(key) || favLeagues.has(m.leagueName);
+    });
   }
 
   // Sidebar league filter
@@ -1019,15 +1023,23 @@ function renderSidebar() {
           <span class="country-chevron">▾</span>
         </div>
         <div class="country-leagues">
-          ${country.leagues.map(lg => {
-      const isActive = selectedLeague === lg.fullName ? 'active' : '';
-      return `
-              <div class="league-item ${isActive}" data-league="${esc(lg.fullName)}">
+          ${[...country.leagues]
+      .sort((a, b) => {
+        const af = favLeagues.has(a.fullName) ? 0 : 1;
+        const bf = favLeagues.has(b.fullName) ? 0 : 1;
+        return af !== bf ? af - bf : b.count - a.count;
+      })
+      .map(lg => {
+        const isActive = selectedLeague === lg.fullName ? 'active' : '';
+        const isFav = favLeagues.has(lg.fullName);
+        return `
+              <div class="league-item ${isActive}${isFav ? ' fav-league' : ''}" data-league="${esc(lg.fullName)}">
                 ${lg.live ? `<span class="league-live-dot"></span>` : ''}
                 <span class="league-item-name" title="${esc(lg.name)}">${esc(lg.name)}</span>
                 <span class="league-item-count">${lg.count}</span>
+                <button class="sb-fav-btn${isFav ? ' fav-on' : ''}" data-fav-league="${esc(lg.fullName)}" title="${isFav ? 'Unfavorite' : 'Favorite'}">★</button>
               </div>`;
-    }).join('')}
+      }).join('')}
         </div>
       </div>`;
   });
@@ -1086,6 +1098,54 @@ function getOddMovement(matchKey, bkKey, outcomeKey, currentVal) {
   return null;
 }
 
+/** Append current odds snapshot to the rolling oddsHistory for each match×bookie. */
+function updateOddsHistory() {
+  allMatches.forEach(m => {
+    const matchKey = `${m.home}|${m.away}|${m.leagueName}`;
+    BOOKIES.forEach(bk => {
+      const data = m.bookmakers[bk.key];
+      if (!data) return;
+      const o = extractOdds(data.odds);
+      const key = `${matchKey}|${bk.key}`;
+      if (!oddsHistory.has(key)) oddsHistory.set(key, { h: [], x: [], a: [] });
+      const hist = oddsHistory.get(key);
+      ['h', 'x', 'a'].forEach(out => {
+        if (valid(o[out])) {
+          hist[out].push(o[out]);
+          if (hist[out].length > CONFIG.ODDS_HISTORY_SIZE) hist[out].shift();
+        }
+      });
+    });
+  });
+}
+
+/** Renders a 3-line SVG sparkline (H/X/A) for a given match×bookie row, or '' if not enough data. */
+function renderSparkline(matchKey, bkKey) {
+  const hist = oddsHistory.get(`${matchKey}|${bkKey}`);
+  if (!hist) return '';
+  const series = [
+    { vals: hist.h, color: '#4ADE80' }, // home  — green
+    { vals: hist.x, color: '#94A3B8' }, // draw  — slate
+    { vals: hist.a, color: '#F87171' }, // away  — red
+  ].filter(s => s.vals.length >= 2);
+  if (series.length === 0) return '';
+
+  const W = 60, H = 12;
+  function poly(vals, color) {
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const span = hi - lo || 1;
+    const pts = vals.map((v, i) => {
+      const x = (i / (vals.length - 1)) * W;
+      const y = H - 1 - ((v - lo) / span) * (H - 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
+  }
+
+  const polys = series.map(s => poly(s.vals, s.color)).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">${polys}</svg>`;
+}
+
 function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey, matchKey) {
   function cellCls(key) {
     const me = myOdds[key];
@@ -1132,6 +1192,7 @@ function renderBkRow(bkLabel, bkCls, myOdds, allOddsArr, valueBets, bkKey, match
       <div class="m-line">2.5</div>
       <div class="m-odd cmp-odd ${cellCls('ov')}${extraCls('ov')}${mOv.cls}" title="Over 2.5"${mOv.attr}>${mOv.el}${cellTxt('ov')}</div>
       <div class="m-odd cmp-odd ${cellCls('un')}${extraCls('un')}${mUn.cls}" title="Under 2.5"${mUn.attr}>${mUn.el}${cellTxt('un')}</div>
+      <div class="bk-spark-cell">${renderSparkline(matchKey, bkKey)}</div>
     </div>`;
 }
 
@@ -1192,6 +1253,7 @@ function renderMatchCompare(m, isLive, timeStr) {
           <div class="m-away" title="${esc(m.away)}">${esc(m.away)}</div>
         </div>
         <div class="mg-badges">${badges}</div>
+        <button class="fav-btn${favMatches.has(matchKey) ? ' fav-on' : ''}" data-fav-match="${esc(matchKey)}" title="${favMatches.has(matchKey) ? 'Remove from favorites' : 'Add to favorites'}">★</button>
       </div>
       <div class="mg-rows">${rows}${fairRow}</div>
     </div>`;
@@ -1243,6 +1305,7 @@ function renderMatchSingle(m, src, isLive, timeStr) {
       <div class="m-odd ${getOddClass(raw.ov, ouLo, ouHi)}${mOv.cls}" title="Over 2.5"${mOv.attr}>${mOv.el}${fmtOdd(raw.ov)}</div>
       <div class="m-odd ${getOddClass(raw.un, ouLo, ouHi)}${mUn.cls}" title="Under 2.5"${mUn.attr}>${mUn.el}${fmtOdd(raw.un)}</div>
       <div class="m-more">${esc(more)}</div>
+      <button class="fav-btn${favMatches.has(matchKey) ? ' fav-on' : ''}" data-fav-match="${esc(matchKey)}" title="${favMatches.has(matchKey) ? 'Remove from favorites' : 'Add to favorites'}">★</button>
     </div>`;
 }
 
@@ -1291,6 +1354,7 @@ function renderLeagueBlock(g, idx) {
           ${liveN ? `<span class="lb-live-badge"><span class="lb-live-dot"></span>${liveN} live</span>` : ''}
           <span class="lb-count">${g.ms.length}</span>
         </div>
+        <button class="fav-btn league-fav-btn${favLeagues.has(g.name) ? ' fav-on' : ''}" data-fav-league="${esc(g.name)}" title="${favLeagues.has(g.name) ? 'Unfavorite league' : 'Favorite league'}">★</button>
         <span class="lb-chevron">▾</span>
       </div>
       <div class="lb-matches">
@@ -1381,11 +1445,23 @@ function renderDropsTab() {
     return `<div class="state-center"><span class="empty-text">No drops detected yet — monitoring…</span></div>`;
   }
 
+  const filtered = dropsSearchQuery
+    ? dropsData.filter(r =>
+        (r.home   || '').toLowerCase().includes(dropsSearchQuery) ||
+        (r.away   || '').toLowerCase().includes(dropsSearchQuery) ||
+        (r.league || '').toLowerCase().includes(dropsSearchQuery)
+      )
+    : dropsData;
+
+  if (!filtered.length) {
+    return `<div class="state-center"><span class="empty-text">No drops match "${esc(dropsSearchQuery)}"</span></div>`;
+  }
+
   const severityLabel = { weak: 'Steam', strong: 'Sharp', extreme: 'Alert' };
   const outcomeLabel  = { h: 'Home', x: 'Draw', a: 'Away', ov: 'Over 2.5', un: 'Under 2.5' };
   const bkLabel       = { merkur: 'MRK', maxbet: 'MAX', soccerbet: 'SBT', cloudbet: 'CLB' };
 
-  const rows = dropsData.map((r, i) => {
+  const rows = filtered.map((r, i) => {
     const country = parseCountry(r.league || '');
     const lname   = parseLeagueName(r.league || '');
     const leagueLabel = country !== 'Other'
@@ -1432,7 +1508,8 @@ function renderContent() {
   const isRanked = activeFilter === 'value' || activeFilter === 'arbs';
 
   let crumb = 'All Matches';
-  if (selectedLeague) {
+  if (activeFilter === 'favs') crumb = '★ Favorites';
+  else if (selectedLeague) {
     const country = parseCountry(selectedLeague);
     const lname = parseLeagueName(selectedLeague);
     crumb = country !== 'Other'
@@ -1445,9 +1522,25 @@ function renderContent() {
   const cdHtml = `<span id="autoRefreshCountdown" class="content-countdown${cdUrgent}" title="Next auto-refresh">↺ ${cdSecs}s</span>`;
 
   if (activeFilter === 'drops') {
+    const dropsCntHtml = dropsSearchQuery
+      ? `<span class="content-count">${dropsData.filter(r =>
+          (r.home   || '').toLowerCase().includes(dropsSearchQuery) ||
+          (r.away   || '').toLowerCase().includes(dropsSearchQuery) ||
+          (r.league || '').toLowerCase().includes(dropsSearchQuery)
+        ).length} of ${dropsData.length}</span>`
+      : dropsData.length ? `<span class="content-count">${dropsData.length}</span>` : '';
     content.innerHTML = `
       <div class="content-bar">
-        <span class="content-crumb">Dropping Odds</span>
+        <span class="content-crumb">Dropping Odds ${dropsCntHtml}</span>
+        <div class="content-tab-search">
+          <span class="cts-icon">⌕</span>
+          <input class="drops-search-input cts-input" type="text"
+            placeholder="Filter team or league…"
+            oninput="setDropsSearch(this.value)"
+            value="${esc(dropsSearchQuery)}"
+            autocomplete="off" spellcheck="false" />
+          ${dropsSearchQuery ? `<button class="cts-clear" onclick="setDropsSearch('')" title="Clear">✕</button>` : ''}
+        </div>
         ${cdHtml}
       </div>
       ${renderDropsTab()}`;
@@ -1461,15 +1554,29 @@ function renderContent() {
         ${cdHtml}
       </div>
       <div class="state-center">
-        <span class="empty-text">No matches found</span>
+        <span class="empty-text">${activeFilter === 'favs'
+          ? 'No favorites yet — star a match ★ or league ★'
+          : 'No matches found'}</span>
       </div>`;
     return;
   }
 
   if (isRanked) {
+    const rankedLabel = activeFilter === 'value'
+      ? `${ms.length} Value Bet${ms.length !== 1 ? 's' : ''}`
+      : `${ms.length} Arb Opportunit${ms.length !== 1 ? 'ies' : 'y'}`;
     content.innerHTML = `
       <div class="content-bar">
-        <span class="content-crumb">${crumb}</span>
+        <span class="content-crumb">${rankedLabel}</span>
+        <div class="content-tab-search">
+          <span class="cts-icon">⌕</span>
+          <input class="ranked-search-input cts-input" type="text"
+            placeholder="Filter team or league…"
+            oninput="setRankedSearch(this.value)"
+            value="${esc(searchQuery)}"
+            autocomplete="off" spellcheck="false" />
+          ${searchQuery ? `<button class="cts-clear" onclick="setRankedSearch('')" title="Clear">✕</button>` : ''}
+        </div>
         ${cdHtml}
       </div>
       ${renderRankedList(ms)}`;
@@ -1503,7 +1610,7 @@ function triggerOddFlash(container) {
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 async function cleanupStaleData() {
-  const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - CONFIG.STALE_DATA_HOURS * 60 * 60 * 1000).toISOString();
   const nowSec = Math.floor(Date.now() / 1000);
   await supa.from('odds_drops').delete().lt('detected_at', cutoff);
   await supa.from('opening_odds').delete().lt('kickoff_at', nowSec);
@@ -1557,12 +1664,12 @@ async function detectAndLogDrops() {
         const curVal  = cur[outcome];
         if (!valid(openVal) || !valid(curVal) || curVal >= openVal) return;
         const dropPct  = (openVal - curVal) / openVal * 100;
-        if (dropPct < 3) return;
+        if (dropPct < CONFIG.DROP_MIN_PCT) return;
         const level    = Math.floor(dropPct / 2) * 2;
         const dedupKey = `${matchKey}|${bk.key}|${outcome}|${level}`;
         if (loggedDropKeys.has(dedupKey)) return;
         loggedDropKeys.add(dedupKey);
-        const severity = dropPct >= 15 ? 'extreme' : dropPct >= 7 ? 'strong' : 'weak';
+        const severity = dropPct >= CONFIG.DROP_EXTREME_PCT ? 'extreme' : dropPct >= CONFIG.DROP_STRONG_PCT ? 'strong' : 'weak';
         rows.push({
           match_key: matchKey, bk_key: bk.key, outcome,
           drop_level: level, opening_val: openVal, current_val: curVal,
@@ -1622,6 +1729,37 @@ function clearSearch() {
   document.getElementById('searchClear').classList.remove('visible');
   renderContent();
   input.focus();
+}
+
+function setDropsSearch(val) {
+  dropsSearchQuery = val.toLowerCase();
+  renderContent();
+  requestAnimationFrame(() => {
+    const inp = document.querySelector('.drops-search-input');
+    if (inp) { inp.focus(); inp.value = val; }
+  });
+}
+
+function setRankedSearch(val) {
+  searchQuery = val.trim();
+  const hdr = document.getElementById('search');
+  if (hdr) {
+    hdr.value = val;
+    document.getElementById('searchClear').classList.toggle('visible', val.length > 0);
+  }
+  renderContent();
+  requestAnimationFrame(() => {
+    const inp = document.querySelector('.ranked-search-input');
+    if (inp) { inp.focus(); inp.value = val; }
+  });
+}
+
+function switchTab(filter) {
+  activeFilter = filter;
+  document.querySelectorAll('.tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.f === filter)
+  );
+  renderContent();
 }
 
 function setViewMode(mode) {
@@ -1794,6 +1932,7 @@ async function loadData() {
 
     allMatches = merged;
     allMatches.forEach(calculateTraderSpecs);
+    updateOddsHistory();
 
     // Dropping odds pipeline
     await cleanupStaleData();
@@ -1842,9 +1981,9 @@ async function loadData() {
   } finally {
     btn.classList.remove('spinning');
 
-    // Restart 60-second auto-refresh countdown
+    // Restart auto-refresh countdown
     clearInterval(autoRefreshInterval);
-    autoRefreshSeconds = 60;
+    autoRefreshSeconds = CONFIG.AUTO_REFRESH_SECS;
     autoRefreshInterval = setInterval(() => {
       autoRefreshSeconds--;
       const el = document.getElementById('autoRefreshCountdown');
@@ -1893,8 +2032,25 @@ document.getElementById('search').addEventListener('input', e => {
   }, 180);
 });
 
+// Content — fav button delegation (match stars and league-block stars)
+document.getElementById('content').addEventListener('click', e => {
+  const btn = e.target.closest('.fav-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  if (btn.dataset.favMatch) toggleFavMatch(btn.dataset.favMatch);
+  else if (btn.dataset.favLeague) toggleFavLeague(btn.dataset.favLeague);
+});
+
 // Sidebar — event delegation
 document.getElementById('sidebar').addEventListener('click', e => {
+  // Sidebar fav buttons take priority
+  const sbFav = e.target.closest('.sb-fav-btn');
+  if (sbFav) {
+    e.stopPropagation();
+    toggleFavLeague(sbFav.dataset.favLeague);
+    return;
+  }
+
   const sbAll = e.target.closest('.sb-all');
   if (sbAll) { selectAll(); return; }
 
@@ -1914,6 +2070,7 @@ document.getElementById('sidebar').addEventListener('click', e => {
     } else {
       collapsedCountries.delete(countryName);
     }
+    saveCollapsed();
   }
 });
 
@@ -1933,6 +2090,8 @@ document.addEventListener('keydown', e => {
 });
 
 // ── INIT ─────────────────────────────────────────────────────────────
+loadFavs();
+loadCollapsed();
 if ('Notification' in window && Notification.permission === 'default') {
   Notification.requestPermission();
 }

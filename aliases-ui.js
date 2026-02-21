@@ -93,6 +93,7 @@ let pmMrkFilter  = '';
 let pmUnmappedOnly = false;
 let pmActiveSlot = null;
 let pmSlotFilter = '';
+let pmSaving     = false;
 
 /* ── Bookie metadata ───────────────────────────────────────── */
 const BK_META = {
@@ -233,6 +234,7 @@ document.getElementById('btnAddTeam').addEventListener('click', async () => {
 document.getElementById('listTeams').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeTeamAlias(btn.dataset.mrk, btn.dataset.mbx);
         renderTeamList();
@@ -320,6 +322,7 @@ document.getElementById('btnAddLeague').addEventListener('click', async () => {
 document.getElementById('listLeagues').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeLeagueAlias(btn.dataset.mrk, btn.dataset.mbx);
         renderLeagueList();
@@ -385,6 +388,7 @@ document.getElementById('btnAddSbtTeam').addEventListener('click', async () => {
 document.getElementById('listSbtTeams').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeSoccerbetTeamAlias(btn.dataset.mrk, btn.dataset.sbt);
         renderSbtTeamList();
@@ -450,6 +454,7 @@ document.getElementById('btnAddSbtLeague').addEventListener('click', async () =>
 document.getElementById('listSbtLeagues').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeSoccerbetLeagueAlias(btn.dataset.mrk, btn.dataset.sbt);
         renderSbtLeagueList();
@@ -515,6 +520,7 @@ document.getElementById('btnAddClbTeam').addEventListener('click', async () => {
 document.getElementById('listClbTeams').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeCloudbetTeamAlias(btn.dataset.mrk, btn.dataset.clb);
         renderClbTeamList();
@@ -580,6 +586,7 @@ document.getElementById('btnAddClbLeague').addEventListener('click', async () =>
 document.getElementById('listClbLeagues').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeCloudbetLeagueAlias(btn.dataset.mrk, btn.dataset.clb);
         renderClbLeagueList();
@@ -627,6 +634,7 @@ document.getElementById('btnAddMbxSbtTeam').addEventListener('click', async () =
 document.getElementById('listMbxSbtTeams').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeMaxbetSbtTeamAlias(btn.dataset.max, btn.dataset.sbt);
         renderMbxSbtTeamList();
@@ -668,6 +676,7 @@ document.getElementById('btnAddMbxClbTeam').addEventListener('click', async () =
 document.getElementById('listMbxClbTeams').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeMaxbetClbTeamAlias(btn.dataset.max, btn.dataset.clb);
         renderMbxClbTeamList();
@@ -709,6 +718,7 @@ document.getElementById('btnAddSbtClbTeam').addEventListener('click', async () =
 document.getElementById('listSbtClbTeams').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeSbtClbTeamAlias(btn.dataset.sbt, btn.dataset.clb);
         renderSbtClbTeamList();
@@ -750,6 +760,7 @@ document.getElementById('btnAddMbxSbtLeague').addEventListener('click', async ()
 document.getElementById('listMbxSbtLeagues').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeMaxbetSbtLeagueAlias(btn.dataset.max, btn.dataset.sbt);
         renderMbxSbtLeagueList();
@@ -791,6 +802,7 @@ document.getElementById('btnAddMbxClbLeague').addEventListener('click', async ()
 document.getElementById('listMbxClbLeagues').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeMaxbetClbLeagueAlias(btn.dataset.max, btn.dataset.clb);
         renderMbxClbLeagueList();
@@ -832,6 +844,7 @@ document.getElementById('btnAddSbtClbLeague').addEventListener('click', async ()
 document.getElementById('listSbtClbLeagues').addEventListener('click', async e => {
     const btn = e.target.closest('.am-alias-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeSbtClbLeagueAlias(btn.dataset.sbt, btn.dataset.clb);
         renderSbtClbLeagueList();
@@ -912,6 +925,7 @@ document.getElementById('btnAddGroup').addEventListener('click', async () => {
 document.getElementById('listGroups').addEventListener('click', async e => {
     const btn = e.target.closest('.am-group-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeLeagueGroup(btn.dataset.name);
         renderGroupList();
@@ -968,6 +982,7 @@ document.getElementById('btnAddDisplayName').addEventListener('click', async () 
 document.getElementById('listDisplayNames').addEventListener('click', async e => {
     const btn = e.target.closest('.am-dn-del');
     if (!btn) return;
+    if (!confirm('Delete this alias?')) return;
     try {
         await removeLeagueDisplayName(btn.dataset.mrk);
         renderDisplayNameList();
@@ -1945,7 +1960,8 @@ function getPmTeamMappedState(mrkName) {
 }
 
 async function onPmSave() {
-    if (!pmSelMrk) return;
+    if (!pmSelMrk || pmSaving) return;
+    pmSaving = true;
     const isTeams = pmMode === 'teams';
     const mrkName = (pmEditName !== null && pmEditName.trim()) ? pmEditName.trim() : pmSelMrk;
     const slots = isTeams ? [
@@ -1959,7 +1975,7 @@ async function onPmSave() {
     ];
     const targetData = isTeams ? pmTeams : pmLeagues;
     const resolved = {};
-    for (const { key, nameKey, aliasGetter } of slots) {
+    for (const { key, aliasGetter } of slots) {
         const existing = aliasGetter().find(a => a.merkur === pmSelMrk);
         if (existing) {
             resolved[key] = null;
@@ -1989,6 +2005,8 @@ async function onPmSave() {
         toast('Mappings saved');
     } catch (e) {
         toast('Save failed: ' + e.message, 'err');
+    } finally {
+        pmSaving = false;
     }
 }
 
@@ -2182,6 +2200,50 @@ function wireSectionToggles() {
         }
     });
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   CLEAR ALL
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+document.getElementById('btnClearAll').addEventListener('click', async () => {
+    const total = [
+        getTeamAliases(), getLeagueAliases(),
+        getSoccerbetTeamAliases(), getSoccerbetLeagueAliases(),
+        getCloudbetTeamAliases(), getCloudbetLeagueAliases(),
+        getMaxbetSbtTeamAliases(), getMaxbetSbtLeagueAliases(),
+        getMaxbetClbTeamAliases(), getMaxbetClbLeagueAliases(),
+        getSbtClbTeamAliases(), getSbtClbLeagueAliases(),
+        getLeagueGroups(), getLeagueDisplayNames(),
+    ].reduce((sum, arr) => sum + arr.length, 0);
+
+    if (!confirm(`Delete ALL ${total} aliases from every table? This cannot be undone.`)) return;
+
+    const tables = [
+        'team_aliases', 'league_aliases',
+        'soccerbet_team_aliases', 'soccerbet_league_aliases',
+        'cloudbet_team_aliases', 'cloudbet_league_aliases',
+        'maxbet_soccerbet_team_aliases', 'maxbet_soccerbet_league_aliases',
+        'maxbet_cloudbet_team_aliases', 'maxbet_cloudbet_league_aliases',
+        'soccerbet_cloudbet_team_aliases', 'soccerbet_cloudbet_league_aliases',
+        'league_groups', 'league_display_names',
+    ];
+
+    try {
+        // Delete all rows — use .not('id', 'is', null) which works for any Supabase default schema
+        await Promise.all(tables.map(t => supa.from(t).delete().not('id', 'is', null)));
+        // Force a fresh DB load
+        await reloadAliasDB();
+        [renderTeamList, renderLeagueList,
+         renderSbtTeamList, renderSbtLeagueList,
+         renderClbTeamList, renderClbLeagueList,
+         renderMbxSbtTeamList, renderMbxSbtLeagueList,
+         renderMbxClbTeamList, renderMbxClbLeagueList,
+         renderSbtClbTeamList, renderSbtClbLeagueList,
+         renderGroupList, renderDisplayNameList].forEach(fn => fn());
+        toast('All aliases cleared', 'warn');
+    } catch (e) {
+        toast('Clear failed: ' + e.message, 'err');
+    }
+});
 
 async function init() {
     wireSectionToggles();
