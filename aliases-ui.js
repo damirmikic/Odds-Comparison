@@ -65,16 +65,21 @@ function parseForBookie(key, data) {
 }
 
 /* ── State ─────────────────────────────────────────────────── */
-let mode         = 'browse';
-let entityType   = 'teams';
-let browseSearch = '';
-let selectedId   = null;
-let addAliasBk   = 'merkur';
+let mode             = 'browse';
+let entityType       = 'teams';
+let browseSearch     = '';
+let browsePartialOnly = false;
+let browseActiveOnly  = false;
+let selectedId       = null;
+let addAliasBk       = 'merkur';
 
-let discEntityType   = 'teams';
-let discLoaded       = false;
-let discColSearch    = { merkur: '', maxbet: '', soccerbet: '', cloudbet: '' }; // per-column search filter
+let discEntityType    = 'teams';
+let discLoaded        = false;
+let discGlobalSearch  = '';
+let discColSearch     = { merkur: '', maxbet: '', soccerbet: '', cloudbet: '' }; // per-column search filter
 let discUnmappedOnly = false;
+let discPartialOnly  = false; // partially mapped only filter
+let discLeagueFilter = ''; // league filter for teams mode
 let discData         = { merkur: [], maxbet: [], soccerbet: [], cloudbet: [] };
 let discSel          = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
 let discAutoSel      = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null }; // auto-suggested (not manually confirmed)
@@ -87,6 +92,7 @@ let _discAliasCache = null;      // Map<"bk:rawName", alias object>
 let _discCanonicalCache = null;  // Map<canonical_id, canonical name>
 
 let _nameCacheLoaded = false;
+let _liveMatchesCache = null; // Cache for live matches by bookie
 
 /* ── Utils ─────────────────────────────────────────────────── */
 function esc(s) {
@@ -144,7 +150,11 @@ document.querySelectorAll('.am-ent-btn[data-type]').forEach(btn => {
         entityType = btn.dataset.type;
         selectedId = null;
         browseSearch = '';
+        browsePartialOnly = false;
+        browseActiveOnly  = false;
         document.getElementById('browseSearch').value = '';
+        document.getElementById('chkBrowsePartial').checked = false;
+        document.getElementById('chkBrowseActive').checked = false;
         document.querySelectorAll('.am-ent-btn[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === entityType));
         renderBrowseList();
         renderBrowseDetail();
@@ -153,6 +163,17 @@ document.querySelectorAll('.am-ent-btn[data-type]').forEach(btn => {
 
 document.getElementById('browseSearch').addEventListener('input', e => {
     browseSearch = e.target.value.toLowerCase();
+    renderBrowseList();
+});
+
+document.getElementById('chkBrowsePartial').addEventListener('change', e => {
+    browsePartialOnly = e.target.checked;
+    renderBrowseList();
+});
+
+document.getElementById('chkBrowseActive').addEventListener('change', async e => {
+    browseActiveOnly = e.target.checked;
+    if (browseActiveOnly && !_liveMatchesCache) await ensureNameCache();
     renderBrowseList();
 });
 
@@ -168,6 +189,20 @@ function getEnrichedList() {
             const cov = {};
             BK_KEYS.forEach(bk => { cov[bk] = aliases.some(a => a.bookie_key === bk); });
             return { ...e, aliases, cov };
+        })
+        .filter(e => {
+            if (!browsePartialOnly) return true;
+            const covCount = BK_KEYS.filter(bk => e.cov[bk]).length;
+            return covCount > 0 && covCount < BK_KEYS.length;
+        })
+        .filter(e => {
+            if (!browseActiveOnly || !_liveMatchesCache) return true;
+            return e.aliases.some(a => {
+                const matches = _liveMatchesCache[a.bookie_key];
+                if (!matches) return false;
+                if (entityType === 'leagues') return matches.some(m => m.leagueName === a.raw_name);
+                return matches.some(m => m.home === a.raw_name || m.away === a.raw_name);
+            });
         });
 }
 
@@ -183,13 +218,30 @@ function renderBrowseList() {
         el.innerHTML = `<div class="am-empty">${browseSearch ? `No results for "${esc(browseSearch)}"` : 'No entities yet — click + New to create one.'}</div>`;
         return;
     }
-    el.innerHTML = list.map(e => `
-        <div class="am-browse-item${selectedId === e.id ? ' selected' : ''}" data-id="${e.id}">
+    el.innerHTML = list.map(e => {
+        // Build tooltip with mapped aliases for this entity
+        const aliasByBk = {};
+        BK_KEYS.forEach(bk => {
+            const bkAliases = e.aliases.filter(a => a.bookie_key === bk);
+            if (bkAliases.length) {
+                aliasByBk[bk] = bkAliases.map(a => a.raw_name).join('\n  • ');
+            }
+        });
+        const tooltipParts = [];
+        BK_KEYS.forEach(bk => {
+            if (aliasByBk[bk]) {
+                tooltipParts.push(`${BK_META[bk].label}:\n  • ${aliasByBk[bk]}`);
+            }
+        });
+        const tooltip = tooltipParts.length ? tooltipParts.join('\n') : 'No aliases mapped';
+        
+        return `<div class="am-browse-item${selectedId === e.id ? ' selected' : ''}" data-id="${e.id}" title="${esc(tooltip)}">
             <div class="am-browse-name">${esc(e.name)}</div>
             <div class="am-browse-bks">
                 ${BK_KEYS.map(bk => `<span class="am-bk-dot ${BK_META[bk].dotCls}${e.cov[bk] ? '' : ' am-dot-dim'}" title="${BK_META[bk].label}"></span>`).join('')}
             </div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 document.getElementById('browseList').addEventListener('click', e => {
@@ -222,13 +274,24 @@ function renderBrowseDetail() {
                 <span class="am-bk-dot ${BK_META[bk].dotCls} am-dot-dim"></span>
                 <span class="am-detail-no-alias">${BK_META[bk].label} — no alias</span>
             </div>`;
-        return bkAliases.map(a => `
-            <div class="am-detail-bk-row">
+        return bkAliases.map(a => {
+            // For leagues, get matches from live data for tooltip
+            let tooltip = '';
+            if (entityType === 'leagues') {
+                const matches = getMatchesForLeague(bk, a.raw_name);
+                if (matches.length > 0) {
+                    tooltip = `Matches:\n${matches.map(m => `  • ${m}`).join('\n')}`;
+                } else {
+                    tooltip = 'No current matches';
+                }
+            }
+            return `<div class="am-detail-bk-row${entityType === 'leagues' ? ' am-detail-row-hover' : ''}" ${tooltip ? `title="${esc(tooltip)}"` : ''}>
                 <span class="am-bk-pill ${BK_META[bk].pillCls}">${BK_META[bk].shortLabel}</span>
                 <span class="am-detail-alias-name">${esc(a.raw_name)}</span>
                 <span class="am-detail-alias-date">${fmtDate(a.created_at)}</span>
                 <button class="am-alias-del" data-alias-id="${a.id}" title="Remove">✕</button>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     }).join('');
 
     // League-only fields
@@ -404,22 +467,55 @@ document.querySelectorAll('.am-ent-btn[data-disc-type]').forEach(btn => {
         discSel       = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
         discAutoSel   = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
         discColSearch = { merkur: '', maxbet: '', soccerbet: '', cloudbet: '' };
+        discGlobalSearch = '';
         discAssignSelId = null;
+        discLeagueFilter = '';
+        discPartialOnly = false;
         // Clear cache when switching entity type
         _discAliasCache = null;
         _discCanonicalCache = null;
+        document.getElementById('discGlobalSearch').value = '';
         BK_KEYS.forEach(bk => {
             const inp = document.getElementById(`discSearch_${bk}`);
             if (inp) inp.value = '';
         });
+        // Show/hide league filter based on entity type
+        document.getElementById('discLeagueFilterWrap').style.display = discEntityType === 'teams' ? '' : 'none';
+        document.getElementById('discLeagueFilter').value = '';
+        document.getElementById('chkDiscPartial').checked = false;
         document.querySelectorAll('.am-ent-btn[data-disc-type]').forEach(b => b.classList.toggle('active', b.dataset.discType === discEntityType));
         if (discLoaded) renderDiscoverColumns();
         renderDiscoverAssign();
     });
 });
 
+/* ── Global search ──────────────────────────────────────────── */
+document.getElementById('discGlobalSearch').addEventListener('input', e => {
+    discGlobalSearch = e.target.value.toLowerCase();
+    if (discLoaded) renderDiscoverColumns();
+});
+
+/* ── League filter dropdown ─────────────────────────────────── */
+document.getElementById('discLeagueFilter').addEventListener('change', e => {
+    discLeagueFilter = e.target.value;
+    if (discLoaded) renderDiscoverColumns();
+});
+
 document.getElementById('chkDiscUnmapped').addEventListener('change', e => {
     discUnmappedOnly = e.target.checked;
+    if (discUnmappedOnly && discPartialOnly) {
+        discPartialOnly = false;
+        document.getElementById('chkDiscPartial').checked = false;
+    }
+    if (discLoaded) renderDiscoverColumns();
+});
+
+document.getElementById('chkDiscPartial').addEventListener('change', e => {
+    discPartialOnly = e.target.checked;
+    if (discPartialOnly && discUnmappedOnly) {
+        discUnmappedOnly = false;
+        document.getElementById('chkDiscUnmapped').checked = false;
+    }
     if (discLoaded) renderDiscoverColumns();
 });
 
@@ -479,11 +575,45 @@ async function loadDiscoverData() {
         discSel       = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
         discAutoSel   = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
         discColSearch = { merkur: '', maxbet: '', soccerbet: '', cloudbet: '' };
+        discGlobalSearch = '';
         discAssignSelId = null;
+        discLeagueFilter = '';
+        discPartialOnly = false;
+        document.getElementById('discGlobalSearch').value = '';
+        document.getElementById('chkDiscPartial').checked = false;
 
         // Build cached mappings for fast lookup
         _discAliasCache = buildDiscAliasCache();
         _discCanonicalCache = buildDiscCanonicalCache();
+
+        // Populate league filter dropdown with canonical leagues (only for teams mode)
+        const leagueFilterEl = document.getElementById('discLeagueFilter');
+        const leagueFilterWrap = document.getElementById('discLeagueFilterWrap');
+        if (discEntityType === 'teams') {
+            const canonicalLeagues = getCanonicalLeagues();
+            const leagueAliases = getBookieLeagueAliases();
+            
+            // Build a map: canonical_id -> set of raw league names across all bookies
+            const canonicalToRawLeagues = new Map();
+            canonicalLeagues.forEach(l => {
+                canonicalToRawLeagues.set(l.id, new Set());
+            });
+            leagueAliases.forEach(a => {
+                const set = canonicalToRawLeagues.get(a.canonical_id);
+                if (set) set.add(a.raw_name);
+            });
+            
+            // Store for filtering use
+            window._canonicalToRawLeagues = canonicalToRawLeagues;
+            
+            // Sort canonical leagues by name
+            const sortedLeagues = [...canonicalLeagues].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            leagueFilterEl.innerHTML = '<option value="">All leagues</option>' +
+                sortedLeagues.map(lg => `<option value="${lg.id}">${esc(lg.name)}</option>`).join('');
+            leagueFilterWrap.style.display = '';
+        } else {
+            leagueFilterWrap.style.display = 'none';
+        }
 
         // Clear search inputs and populate datalists
         BK_KEYS.forEach(bk => {
@@ -549,21 +679,65 @@ function getCanonicalForAlias(bk, rawName) {
 }
 
 function renderDiscoverColumns() {
+    // Get the set of raw league names for the selected canonical league
+    let filterLeagueNames = null;
+    if (discEntityType === 'teams' && discLeagueFilter && window._canonicalToRawLeagues) {
+        filterLeagueNames = window._canonicalToRawLeagues.get(parseInt(discLeagueFilter, 10));
+    }
+    
     BK_KEYS.forEach(bk => {
+        const q = discColSearch[bk];
+
         // Keep datalist in sync with current entity type filter
         const dl = document.getElementById(`dlDisc_${bk}`);
         if (dl && discLoaded) {
-            const q   = discColSearch[bk];
             const src = discData[bk] || [];
-            const names = q ? src.filter(i => i.name.toLowerCase().includes(q)) : src;
+            const names = src.filter(i => {
+                const n = i.name.toLowerCase();
+                return q ? n.includes(q) : (!discGlobalSearch || n.includes(discGlobalSearch));
+            });
             dl.innerHTML = names.map(i => `<option value="${esc(i.name)}"></option>`).join('');
         }
 
-        const items    = discData[bk] || [];
-        const q        = discColSearch[bk];
+        const items = discData[bk] || [];
         const filtered = items.filter(item => {
-            if (q && !item.name.toLowerCase().includes(q)) return false;
-            if (discUnmappedOnly && hasCanonicalAlias(bk, item.name)) return false;
+            const nameLC = item.name.toLowerCase();
+            // Per-column search overrides global search for this column
+            if (q) { if (!nameLC.includes(q)) return false; }
+            else if (discGlobalSearch && !nameLC.includes(discGlobalSearch)) return false;
+            
+            const mapped = hasCanonicalAlias(bk, item.name);
+            
+            if (discUnmappedOnly && mapped) return false;
+            
+            // Partial mapped filter: show only items that are mapped but not across all bookies
+            if (discPartialOnly) {
+                if (!mapped) return false; // must be mapped in at least one bookie
+                // Check if the canonical entity has aliases for all bookies
+                const canonName = getCanonicalForAlias(bk, item.name);
+                if (!canonName) return false;
+                // Find the canonical entity and check its coverage
+                const entities = discEntityType === 'teams' ? getCanonicalTeams() : getCanonicalLeagues();
+                const canonEntity = entities.find(e => e.name === canonName);
+                if (!canonEntity) return false;
+                const allAliases = discEntityType === 'teams' ? getBookieTeamAliases() : getBookieLeagueAliases();
+                const entityAliases = allAliases.filter(a => a.canonical_id === canonEntity.id);
+                const coveredBookies = new Set(entityAliases.map(a => a.bookie_key));
+                // Partial means not all 4 bookies are covered
+                if (coveredBookies.size >= BK_KEYS.length) return false;
+            }
+            
+            // Apply league filter for teams mode using canonical league mapping
+            if (discEntityType === 'teams' && filterLeagueNames && filterLeagueNames.size > 0) {
+                // Check if any of the team's matches are in a league that maps to the selected canonical league
+                const hasLeague = item.matches && item.matches.some(m => {
+                    // Extract league name from match string (format: "league: vs opponent")
+                    const leagueName = m.split(': ')[0];
+                    // Check if this raw league name is mapped to the selected canonical league
+                    return filterLeagueNames.has(leagueName);
+                });
+                if (!hasLeague) return false;
+            }
             return true;
         });
 
@@ -571,7 +745,7 @@ function renderDiscoverColumns() {
         const list = document.getElementById(`discList_${bk}`);
 
         if (!filtered.length) {
-            list.innerHTML = `<div class="am-picker-empty">${discLoaded ? (discUnmappedOnly ? 'All mapped ✓' : 'No items') : 'Click "Load Live Data" to start'}</div>`;
+            list.innerHTML = `<div class="am-picker-empty">${discLoaded ? (discUnmappedOnly ? 'All mapped ✓' : (discPartialOnly ? 'No partial mapped' : 'No items')) : 'Click "Load Live Data" to start'}</div>`;
             return;
         }
 
@@ -843,8 +1017,8 @@ document.getElementById('btnClearAll').addEventListener('click', async () => {
 });
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   NAME CACHE (background datalist population)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    NAME CACHE (background datalist population)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 async function ensureNameCache() {
     if (_nameCacheLoaded) return;
     _nameCacheLoaded = true;
@@ -862,6 +1036,14 @@ async function ensureNameCache() {
         const sbtM = (dSbt.esMatches || []).filter(m => m.sport === 'S' && !isSbtOutright(m));
         const clbM = parseCloudbetRaw(dClb);
 
+        // Cache live matches by bookie for tooltip use
+        _liveMatchesCache = {
+            merkur: mrkM,
+            maxbet: maxM,
+            soccerbet: sbtM,
+            cloudbet: clbM
+        };
+
         const teams  = ms => [...new Set(ms.flatMap(m => [m.home, m.away]))].sort();
         const leagues = ms => [...new Set(ms.map(m => m.leagueName))].sort();
         const fill   = (id, names) => {
@@ -877,6 +1059,16 @@ async function ensureNameCache() {
         _nameCacheLoaded = false;
         console.warn('[aliases] Name cache load failed:', e.message);
     }
+}
+
+/* ── Get matches for a specific league from cache ─────────────── */
+function getMatchesForLeague(bk, leagueName) {
+    if (!_liveMatchesCache || !_liveMatchesCache[bk]) return [];
+    const matches = _liveMatchesCache[bk];
+    return matches
+        .filter(m => m.leagueName === leagueName)
+        .map(m => `${m.home} vs ${m.away}`)
+        .slice(0, 8); // Limit to 8 matches for tooltip
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

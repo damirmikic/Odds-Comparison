@@ -47,6 +47,14 @@
                 </button>
             </div>
             <input class="am-input am-search" id="browseSearch" placeholder="Search entities…" autocomplete="off" />
+            <label class="am-toggle-wrap">
+                <input type="checkbox" id="chkBrowsePartial" />
+                <span class="am-toggle-label">Partial mapped</span>
+            </label>
+            <label class="am-toggle-wrap">
+                <input type="checkbox" id="chkBrowseActive" />
+                <span class="am-toggle-label">Active only</span>
+            </label>
             <button class="am-btn am-btn-primary" id="btnNewEntity">+ New</button>
         </div>
 
@@ -69,13 +77,23 @@
 
         <div class="am-disc-toolbar">
             <button class="am-btn am-btn-primary" id="btnDiscLoad">⟳ Load Live Data</button>
+            <input class="am-input am-search" id="discGlobalSearch" placeholder="Search all columns…" autocomplete="off" />
             <div class="am-ent-toggle">
                 <button class="am-ent-btn active" data-disc-type="teams">Teams</button>
                 <button class="am-ent-btn" data-disc-type="leagues">Leagues</button>
             </div>
+            <div class="am-disc-league-filter" id="discLeagueFilterWrap" style="display:none;">
+                <select class="am-input am-disc-league-sel" id="discLeagueFilter">
+                    <option value="">All leagues</option>
+                </select>
+            </div>
             <label class="am-toggle-wrap">
                 <input type="checkbox" id="chkDiscUnmapped" />
                 <span class="am-toggle-label">Unmapped only</span>
+            </label>
+            <label class="am-toggle-wrap">
+                <input type="checkbox" id="chkDiscPartial" />
+                <span class="am-toggle-label">Partial mapped</span>
             </label>
         </div>
 

@@ -1648,6 +1648,13 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
 }
+.am-detail-bk-row.am-detail-row-hover {
+    cursor: help;
+}
+.am-detail-bk-row.am-detail-row-hover:hover {
+    background: var(--surface-2);
+    border-color: var(--dim);
+}
 .am-detail-bk-empty {
     background: transparent;
     border-style: dashed;
@@ -1726,6 +1733,28 @@ body {
     flex-wrap: wrap;
 }
 .am-disc-toolbar .am-input { max-width: 220px; }
+
+/* League filter dropdown */
+.am-disc-league-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.am-disc-league-sel {
+    min-width: 180px;
+    max-width: 280px;
+    font-size: 12px;
+    padding: 5px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    cursor: pointer;
+}
+.am-disc-league-sel:focus {
+    border-color: var(--accent);
+    outline: none;
+}
 
 .am-disc-layout {
     display: flex;
