@@ -559,3 +559,107 @@ function buildSbtClbLeagueAliasMap(normFn) {
     });
     return map;
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   CANONICAL SCHEMA v2
+   Tables: canonical_teams, canonical_leagues,
+           bookie_team_aliases, bookie_league_aliases
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+let _v2 = { teams: [], leagues: [], teamAliases: [], leagueAliases: [] };
+let _v2Loaded = false;
+
+async function loadCanonicalDB() {
+    if (_v2Loaded) return;
+    
+    // Fetch all team aliases using pagination (Supabase limits to 1000 per query)
+    async function fetchAllAliases(table) {
+        const allData = [];
+        let from = 0;
+        const batchSize = 1000;
+        while (true) {
+            const { data, error } = await supa.from(table).select('*').range(from, from + batchSize - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            allData.push(...data);
+            if (data.length < batchSize) break; // Last batch
+            from += batchSize;
+        }
+        return allData;
+    }
+    
+    const [t, l, ta, la] = await Promise.all([
+        supa.from('canonical_teams').select('*').order('name').then(r => { if (r.error) throw r.error; return r.data; }),
+        supa.from('canonical_leagues').select('*').order('name').then(r => { if (r.error) throw r.error; return r.data; }),
+        fetchAllAliases('bookie_team_aliases'),
+        fetchAllAliases('bookie_league_aliases'),
+    ]);
+    
+    _v2.teams = t || []; _v2.leagues = l || [];
+    // Normalize canonical_id to number — Supabase may return it as a string
+    const normId = a => ({ ...a, canonical_id: Number(a.canonical_id) });
+    _v2.teamAliases   = (ta || []).map(normId);
+    _v2.leagueAliases = (la || []).map(normId);
+    _v2Loaded = true;
+}
+
+async function reloadCanonicalDB() { _v2Loaded = false; await loadCanonicalDB(); }
+
+function getCanonicalTeams()      { return [..._v2.teams]; }
+function getCanonicalLeagues()    { return [..._v2.leagues]; }
+function getBookieTeamAliases()   { return [..._v2.teamAliases]; }
+function getBookieLeagueAliases() { return [..._v2.leagueAliases]; }
+
+async function addCanonical(type, name, extras = {}) {
+    const table = type === 'teams' ? 'canonical_teams' : 'canonical_leagues';
+    const row = type === 'leagues'
+        ? { name, country: extras.country || null, display_name: extras.display_name || null, group_name: extras.group_name || null, sort_order: extras.sort_order || null }
+        : { name };
+    const { data, error } = await supa.from(table).insert([row]).select().single();
+    if (error) throw error;
+    (type === 'teams' ? _v2.teams : _v2.leagues).push(data);
+    return data;
+}
+
+async function updateCanonical(type, id, updates) {
+    const table = type === 'teams' ? 'canonical_teams' : 'canonical_leagues';
+    const { data, error } = await supa.from(table).update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    const arr = type === 'teams' ? _v2.teams : _v2.leagues;
+    const idx = arr.findIndex(r => r.id === id);
+    if (idx !== -1) arr[idx] = data;
+    return data;
+}
+
+async function deleteCanonical(type, id) {
+    const table = type === 'teams' ? 'canonical_teams' : 'canonical_leagues';
+    const { error } = await supa.from(table).delete().eq('id', id);
+    if (error) throw error;
+    if (type === 'teams') {
+        _v2.teams = _v2.teams.filter(r => r.id !== id);
+        _v2.teamAliases = _v2.teamAliases.filter(a => a.canonical_id !== id);
+    } else {
+        _v2.leagues = _v2.leagues.filter(r => r.id !== id);
+        _v2.leagueAliases = _v2.leagueAliases.filter(a => a.canonical_id !== id);
+    }
+}
+
+async function addBookieAlias(type, bookie_key, raw_name, canonical_id) {
+    const table = type === 'teams' ? 'bookie_team_aliases' : 'bookie_league_aliases';
+    const { data, error } = await supa.from(table)
+        .upsert([{ bookie_key, raw_name, canonical_id }], { onConflict: 'bookie_key,raw_name' })
+        .select().single();
+    if (error) throw error;
+    const arr = type === 'teams' ? _v2.teamAliases : _v2.leagueAliases;
+    const idx = arr.findIndex(a => a.bookie_key === bookie_key && a.raw_name === raw_name);
+    if (idx !== -1) arr[idx] = data; else arr.push(data);
+    return data;
+}
+
+async function removeBookieAlias(type, id) {
+    const table = type === 'teams' ? 'bookie_team_aliases' : 'bookie_league_aliases';
+    const { error } = await supa.from(table).delete().eq('id', id);
+    if (error) throw error;
+    if (type === 'teams') _v2.teamAliases = _v2.teamAliases.filter(a => a.id !== id);
+    else _v2.leagueAliases = _v2.leagueAliases.filter(a => a.id !== id);
+}

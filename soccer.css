@@ -232,6 +232,53 @@ input {
   box-shadow: 0 0 5px rgba(167, 139, 250, 0.5);
 }
 
+/* Missing source selector */
+.missing-source-btns {
+  display: flex;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.msrc-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 5px;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+.msrc-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.msrc-btn.active {
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+}
+
+.missing-bk-name {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+
 /* Tabs */
 .tabs {
   display: flex;

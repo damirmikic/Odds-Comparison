@@ -1,50 +1,46 @@
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ALIAS MANAGER — UI LOGIC (Supabase Edition)
+   ALIAS MANAGER v2 — UI LOGIC (Canonical Schema)
+   Two modes: Browse (entity list + detail) | Discover (4-col live data)
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/* ── Bookie config ─────────────────────────────────────────── */
+const CLOUDBET_KEY = 'eyJhbGciOiJSUzI1NiIsImtpZCI6IkhKcDkyNnF3ZXBjNnF3LU9rMk4zV05pXzBrRFd6cEdwTzAxNlRJUjdRWDAiLCJ0eXAiOiJKV1QifQ.eyJhY2Nlc3NfdGllciI6InRyYWRpbmciLCJleHAiOjIwNjE1Mzc1MDIsImlhdCI6MTc0NjE3NzUwMiwianRpIjoiNTU1ODk0NjgtZjJhZi00ZGQ3LWE3MTQtZjNiNjgyMWU4OGRkIiwic3ViIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3IiwidGVuYW50IjoiY2xvdWRiZXQiLCJ1dWlkIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3In0.BW_nXSwTkxTI7C-1UzgxWLnNzo9Bo1Ed8hI9RfVLnrJa6sfsMyvQ1NrtT5t6i_emwhkRHU1hY-9i6c2c5AI4fc2mRLSNBujvrfbVHX67uB58E8TeSOZUBRi0eqfLBL7sYl1JNPZzhFkDBCBNFJZJpn40FIjIrtIiPd-G5ClaaSMRWrFUDiwA1NmyxHSfkfRpeRSnfk15qck7zSIeNeITzPbD7kZGDIeStmcHuiHfcQX3NaHaI0gyw60wmDgan83NpYQYRVLQ9C4icbNhel4n5H5FGFAxQS8IcvynqV8f-vz2t4BRGuYXBU8uhdYKgezhyQrSvX6NpwNPBJC8CWo2fA';
+
 const APIS = {
-    merkur: 'https://www.merkurxtip.rs/restapi/offer/en/init',
-    maxbet: 'https://www.maxbet.rs/restapi/offer/en/init',
+    merkur:    'https://www.merkurxtip.rs/restapi/offer/en/init',
+    maxbet:    'https://www.maxbet.rs/restapi/offer/en/init',
     soccerbet: 'https://www.soccerbet.rs/restapi/offer/en/init',
 };
 
-const CLOUDBET_KEY = 'eyJhbGciOiJSUzI1NiIsImtpZCI6IkhKcDkyNnF3ZXBjNnF3LU9rMk4zV05pXzBrRFd6cEdwTzAxNlRJUjdRWDAiLCJ0eXAiOiJKV1QifQ.eyJhY2Nlc3NfdGllciI6InRyYWRpbmciLCJleHAiOjIwNjE1Mzc1MDIsImlhdCI6MTc0NjE3NzUwMiwianRpIjoiNTU1ODk0NjgtZjJhZi00ZGQ3LWE3MTQtZjNiNjgyMWU4OGRkIiwic3ViIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3IiwidGVuYW50IjoiY2xvdWRiZXQiLCJ1dWlkIjoiOGYwYTk5YTEtNTFhZi00YzJlLWFlNDUtY2MxNjgwNDVjZTc3In0.BW_nXSwTkxTI7C-1UzgxWLnNzo9Bo1Ed8hI9RfVLnrJa6sfsMyvQ1NrtT5t6i_emwhkRHU1hY-9i6c2c5AI4fc2mRLSNBujvrfbVHX67uB58E8TeSOZUBRi0eqfLBL7sYl1JNPZzhFkDBCBNFJZJpn40FIjIrtIiPd-G5ClaaSMRWrFUDiwA1NmyxHSfkfRpeRSnfk15qck7zSIeNeITzPbD7kZGDIeStmcHuiHfcQX3NaHaI0gyw60wmDgan83NpYQYRVLQ9C4icbNhel4n5H5FGFAxQS8IcvynqV8f-vz2t4BRGuYXBU8uhdYKgezhyQrSvX6NpwNPBJC8CWo2fA';
-
 function getCloudbetUrl() {
     const now = Math.floor(Date.now() / 1000);
-    const to  = now + 7 * 24 * 3600;
-    return `https://sports-api.cloudbet.com/pub/v2/odds/events?sport=soccer&live=false&from=${now}&to=${to}&markets=soccer.match_odds&markets=soccer.total_goals&players=false&limit=2000`;
+    return `https://sports-api.cloudbet.com/pub/v2/odds/events?sport=soccer&live=false&from=${now}&to=${now + 7 * 24 * 3600}&markets=soccer.match_odds&players=false&limit=2000`;
 }
 
-// Derive "Country: League Name" from comp.key + comp.name — no hardcoded dictionary.
-// Strategy: slug-ify comp.name, strip it from the end of comp.key, remainder = country slug.
-// e.g. key="soccer-el-salvador-primera-division", name="Primera División"
-//   → compSlug="primera-division", strip → "el-salvador" → "El Salvador: Primera División"
+const BK_META = {
+    merkur:    { dotCls: 'am-bk-m',  pillCls: 'am-bk-m',  label: 'MerkurXtip', shortLabel: 'MRK' },
+    maxbet:    { dotCls: 'am-bk-b',  pillCls: 'am-bk-b',  label: 'MaxBet',      shortLabel: 'MAX' },
+    soccerbet: { dotCls: 'am-bk-s',  pillCls: 'am-bk-s',  label: 'SoccerBet',   shortLabel: 'SBT' },
+    cloudbet:  { dotCls: 'am-bk-cl', pillCls: 'am-bk-cl', label: 'Cloudbet',    shortLabel: 'CLB' },
+};
+const BK_KEYS = ['merkur', 'maxbet', 'soccerbet', 'cloudbet'];
+
+/* ── Parse helpers ─────────────────────────────────────────── */
+function isSbtOutright(m) {
+    const lg = (m.leagueName || '').toLowerCase(), h = (m.home || '').toLowerCase(), a = (m.away || '').toLowerCase();
+    return lg.includes('pobednik') || /\d{4}\/\d{2}/.test(lg) || h.includes('pobednik') || a.includes('pobednik');
+}
+function isMaxbetBonus(m) { return (m.leagueName || '').toLowerCase().includes('bonus'); }
+
 function resolveCloudbetLeagueName(comp) {
     const rest = (comp.key || '').replace(/^soccer-/, '');
     if (!rest || !comp.name) return comp.name || '';
-
-    const compSlug = comp.name
-        .toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip diacritics (é→e, ü→u, etc.)
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-
-    let countrySlug;
-    if (compSlug && rest.endsWith('-' + compSlug)) {
-        // Primary: strip competition slug from end → remainder is the country slug
-        countrySlug = rest.slice(0, -(compSlug.length + 1));
-    } else {
-        // Fallback (comp.name slug diverges from key): use first segment as hint
-        countrySlug = rest.split('-')[0];
-    }
-
+    const compSlug = comp.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    let countrySlug = compSlug && rest.endsWith('-' + compSlug)
+        ? rest.slice(0, -(compSlug.length + 1))
+        : rest.split('-')[0];
     if (!countrySlug) return comp.name;
-
-    const country = countrySlug.split('-')
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ');
-    return `${country}: ${comp.name}`;
+    return `${countrySlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}: ${comp.name}`;
 }
 
 function parseCloudbetRaw(data) {
@@ -60,2209 +56,842 @@ function parseCloudbetRaw(data) {
     return matches;
 }
 
-/* ── State ─────────────────────────────────────────────────── */
-let unmatchedMrk = [];
-let unmatchedMbx = [];
-let allMrkItems = [];
-let allOtherItems = [];
-let cachedSuggestions = [];
-let leagueMode = false;
-let browseAll = false;
-let pickerSource = 'mrk'; // 'mrk' | 'max' | 'sbt'
-let pickerTarget = 'max'; // 'max' | 'sbt' | 'clb'
-let selMrk = null;
-let selMbx = null;
-let filterQuery = '';
-let teamSearchQuery = '';
-let leagueSearchQuery = '';
-let leagueFilterMrk = '';
-let leagueFilterMbx = '';
-
-/* ── Parallel Mapper state ─────────────────────────────────── */
-let pmLeagues     = { mrk: [], max: [], sbt: [], clb: [] };
-let pmMatches     = { mrk: {}, max: {}, sbt: {}, clb: {} }; // leagueName → [{home,away}]
-let pmTeams       = { mrk: [], max: [], sbt: [], clb: [] };
-let pmTeamLeagues = { mrk: {}, max: {}, sbt: {}, clb: {} }; // teamName → [leagueNames]
-let pmMode       = 'leagues'; // 'leagues' | 'teams'
-let pmLoaded     = false;
-let pmSelMrk     = null;
-let pmEditName   = null;
-let pmOverrides  = { max: null, sbt: null, clb: null };
-let pmBulkSugs   = [];
-let pmMrkFilter  = '';
-let pmUnmappedOnly = false;
-let pmActiveSlot = null;
-let pmSlotFilter = '';
-let pmSaving     = false;
-
-/* ── Bookie metadata ───────────────────────────────────────── */
-const BK_META = {
-    mrk: { dotCls: 'am-bk-m',  label: 'MerkurXtip', api: () => fetch(APIS.merkur) },
-    max: { dotCls: 'am-bk-b',  label: 'MaxBet',      api: () => fetch(APIS.maxbet) },
-    sbt: { dotCls: 'am-bk-s',  label: 'SoccerBet',   api: () => fetch(APIS.soccerbet) },
-    clb: { dotCls: 'am-bk-cl', label: 'Cloudbet',    api: () => fetch(getCloudbetUrl(), { headers: { 'X-API-Key': CLOUDBET_KEY } }) },
-};
-
 function parseForBookie(key, data) {
-    if (key === 'clb') return parseCloudbetRaw(data);
+    if (key === 'cloudbet') return parseCloudbetRaw(data);
     const matches = (data.esMatches || []).filter(m => m.sport === 'S');
-    if (key === 'sbt') return matches.filter(m => !isSbtOutright(m));
-    if (key === 'max') return matches.filter(m => !isMaxbetBonus(m));
-    return matches; // mrk
+    if (key === 'soccerbet') return matches.filter(m => !isSbtOutright(m));
+    if (key === 'maxbet') return matches.filter(m => !isMaxbetBonus(m));
+    return matches;
 }
 
-// Supabase is real-time, so we don't need the unsaved changes logic anymore.
-// However, we'll keep the import/clear-all buttons.
-
-/* ── Toast ─────────────────────────────────────────────────── */
-let toastTimer;
-function toast(msg, type = 'ok') {
-    const el = document.getElementById('toast');
-    el.textContent = msg;
-    el.className = `am-toast show am-toast-${type}`;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
-}
-
-/* ── Tab switching ─────────────────────────────────────────── */
-document.querySelectorAll('.am-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.am-tab').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.am-panel').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`panel${capitalize(btn.dataset.tab)}`).classList.add('active');
-    });
-});
-
-function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-
-/* ── Tab search inputs ─────────────────────────────────────── */
-document.getElementById('teamSearch').addEventListener('input', e => {
-    teamSearchQuery = e.target.value.toLowerCase();
-    renderTeamList();
-    renderSbtTeamList();
-    renderClbTeamList();
-    renderMbxSbtTeamList();
-    renderMbxClbTeamList();
-    renderSbtClbTeamList();
-});
-document.getElementById('leagueSearch').addEventListener('input', e => {
-    leagueSearchQuery = e.target.value.toLowerCase();
-    renderLeagueList();
-    renderSbtLeagueList();
-    renderClbLeagueList();
-    renderMbxSbtLeagueList();
-    renderMbxClbLeagueList();
-    renderSbtClbLeagueList();
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TEAMS TAB
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function renderTeamList() {
-    const all = getTeamAliases();
-    document.getElementById('tabTeamCount').textContent = all.length;
-    const q = teamSearchQuery;
-    const aliases = q ? all.filter(a =>
-        a.merkur.toLowerCase().includes(q) || a.maxbet.toLowerCase().includes(q)
-    ) : all;
-    updateTeamSearchCount();
-    const list = document.getElementById('listTeams');
-
-    if (!all.length) {
-        list.innerHTML = `<div class="am-empty">No team aliases in Supabase yet.</div>`;
-        return;
-    }
-    if (!aliases.length) {
-        list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`;
-        return;
-    }
-
-    list.innerHTML = aliases.map((a) => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">MRK</span>
-        <span class="am-alias-name">${esc(a.merkur)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill am-bk-b">MAX</span>
-        <span class="am-alias-name">${esc(a.maxbet)}</span>
-      </div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-mrk="${esc(a.merkur)}" data-mbx="${esc(a.maxbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-function updateTeamSearchCount() {
-    const el = document.getElementById('teamSearchCount');
-    if (!el) return;
-    const q = teamSearchQuery;
-    const maxAll    = getTeamAliases();
-    const sbtAll    = getSoccerbetTeamAliases();
-    const clbAll    = getCloudbetTeamAliases();
-    const mbxSbtAll = getMaxbetSbtTeamAliases();
-    const mbxClbAll = getMaxbetClbTeamAliases();
-    const sbtClbAll = getSbtClbTeamAliases();
-    const total = maxAll.length + sbtAll.length + clbAll.length + mbxSbtAll.length + mbxClbAll.length + sbtClbAll.length;
-    if (!q) { el.textContent = total ? `${total} total` : ''; return; }
-    const shown = maxAll.filter(a => a.merkur.toLowerCase().includes(q) || a.maxbet.toLowerCase().includes(q)).length
-                + sbtAll.filter(a => a.merkur.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)).length
-                + clbAll.filter(a => a.merkur.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)).length
-                + mbxSbtAll.filter(a => a.maxbet.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)).length
-                + mbxClbAll.filter(a => a.maxbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)).length
-                + sbtClbAll.filter(a => a.soccerbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)).length;
-    el.textContent = `${shown} / ${total}`;
-}
-
-document.getElementById('btnAddTeam').addEventListener('click', async () => {
-    const mrk = document.getElementById('inTeamMrk').value.trim();
-    const mbx = document.getElementById('inTeamMbx').value.trim();
-    if (!mrk || !mbx) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await addTeamAlias(mrk, mbx);
-        document.getElementById('inTeamMrk').value = '';
-        document.getElementById('inTeamMbx').value = '';
-        renderTeamList();
-        toast(`Synced to Supabase: "${mrk}" → "${mbx}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listTeams').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeTeamAlias(btn.dataset.mrk, btn.dataset.mbx);
-        renderTeamList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   LEAGUES TAB
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function renderLeagueList() {
-    const all = getLeagueAliases();
-    document.getElementById('tabLeagueCount').textContent = all.length;
-    const q = leagueSearchQuery;
-    const aliases = q ? all.filter(a =>
-        a.merkur.toLowerCase().includes(q) || a.maxbet.toLowerCase().includes(q)
-    ) : all;
-    updateLeagueSearchCount();
-    const list = document.getElementById('listLeagues');
-
-    if (!all.length) {
-        list.innerHTML = `<div class="am-empty">No league aliases in Supabase yet.</div>`;
-        return;
-    }
-    if (!aliases.length) {
-        list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`;
-        return;
-    }
-
-    list.innerHTML = aliases.map((a) => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">MRK</span>
-        <span class="am-alias-name">${esc(a.merkur)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill am-bk-b">MAX</span>
-        <span class="am-alias-name">${esc(a.maxbet)}</span>
-      </div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-mrk="${esc(a.merkur)}" data-mbx="${esc(a.maxbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-function updateLeagueSearchCount() {
-    const el = document.getElementById('leagueSearchCount');
-    if (!el) return;
-    const q = leagueSearchQuery;
-    const maxAll    = getLeagueAliases();
-    const sbtAll    = getSoccerbetLeagueAliases();
-    const clbAll    = getCloudbetLeagueAliases();
-    const mbxSbtAll = getMaxbetSbtLeagueAliases();
-    const mbxClbAll = getMaxbetClbLeagueAliases();
-    const sbtClbAll = getSbtClbLeagueAliases();
-    const total = maxAll.length + sbtAll.length + clbAll.length + mbxSbtAll.length + mbxClbAll.length + sbtClbAll.length;
-    if (!q) { el.textContent = total ? `${total} total` : ''; return; }
-    const shown = maxAll.filter(a => a.merkur.toLowerCase().includes(q) || a.maxbet.toLowerCase().includes(q)).length
-                + sbtAll.filter(a => a.merkur.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)).length
-                + clbAll.filter(a => a.merkur.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)).length
-                + mbxSbtAll.filter(a => a.maxbet.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)).length
-                + mbxClbAll.filter(a => a.maxbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)).length
-                + sbtClbAll.filter(a => a.soccerbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)).length;
-    el.textContent = `${shown} / ${total}`;
-}
-
-document.getElementById('btnAddLeague').addEventListener('click', async () => {
-    const mrk = document.getElementById('inLeagueMrk').value.trim();
-    const mbx = document.getElementById('inLeagueMbx').value.trim();
-    if (!mrk || !mbx) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await addLeagueAlias(mrk, mbx);
-        document.getElementById('inLeagueMrk').value = '';
-        document.getElementById('inLeagueMbx').value = '';
-        renderLeagueList();
-        toast(`Synced to Supabase: "${mrk}" → "${mbx}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listLeagues').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeLeagueAlias(btn.dataset.mrk, btn.dataset.mbx);
-        renderLeagueList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SOCCERBET TEAM ALIASES
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function renderSbtTeamList() {
-    const all = getSoccerbetTeamAliases();
-    const q = teamSearchQuery;
-    const aliases = q ? all.filter(a =>
-        a.merkur.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)
-    ) : all;
-    updateTeamSearchCount();
-    const list = document.getElementById('listSbtTeams');
-
-    if (!all.length) {
-        list.innerHTML = `<div class="am-empty">No SoccerBet team aliases yet.</div>`;
-        return;
-    }
-    if (!aliases.length) {
-        list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`;
-        return;
-    }
-
-    list.innerHTML = aliases.map((a) => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">MRK</span>
-        <span class="am-alias-name">${esc(a.merkur)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill am-bk-s">SBT</span>
-        <span class="am-alias-name">${esc(a.soccerbet)}</span>
-      </div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-mrk="${esc(a.merkur)}" data-sbt="${esc(a.soccerbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddSbtTeam').addEventListener('click', async () => {
-    const mrk = document.getElementById('inSbtTeamMrk').value.trim();
-    const sbt = document.getElementById('inSbtTeamSbt').value.trim();
-    if (!mrk || !sbt) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await addSoccerbetTeamAlias(mrk, sbt);
-        document.getElementById('inSbtTeamMrk').value = '';
-        document.getElementById('inSbtTeamSbt').value = '';
-        renderSbtTeamList();
-        toast(`Synced: "${mrk}" → "${sbt}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listSbtTeams').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeSoccerbetTeamAlias(btn.dataset.mrk, btn.dataset.sbt);
-        renderSbtTeamList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SOCCERBET LEAGUE ALIASES
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function renderSbtLeagueList() {
-    const all = getSoccerbetLeagueAliases();
-    const q = leagueSearchQuery;
-    const aliases = q ? all.filter(a =>
-        a.merkur.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)
-    ) : all;
-    updateLeagueSearchCount();
-    const list = document.getElementById('listSbtLeagues');
-
-    if (!all.length) {
-        list.innerHTML = `<div class="am-empty">No SoccerBet league aliases yet.</div>`;
-        return;
-    }
-    if (!aliases.length) {
-        list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`;
-        return;
-    }
-
-    list.innerHTML = aliases.map((a) => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">MRK</span>
-        <span class="am-alias-name">${esc(a.merkur)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill am-bk-s">SBT</span>
-        <span class="am-alias-name">${esc(a.soccerbet)}</span>
-      </div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-mrk="${esc(a.merkur)}" data-sbt="${esc(a.soccerbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddSbtLeague').addEventListener('click', async () => {
-    const mrk = document.getElementById('inSbtLeagueMrk').value.trim();
-    const sbt = document.getElementById('inSbtLeagueSbt').value.trim();
-    if (!mrk || !sbt) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await addSoccerbetLeagueAlias(mrk, sbt);
-        document.getElementById('inSbtLeagueMrk').value = '';
-        document.getElementById('inSbtLeagueSbt').value = '';
-        renderSbtLeagueList();
-        toast(`Synced: "${mrk}" → "${sbt}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listSbtLeagues').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeSoccerbetLeagueAlias(btn.dataset.mrk, btn.dataset.sbt);
-        renderSbtLeagueList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   CLOUDBET TEAM ALIASES
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function renderClbTeamList() {
-    const all = getCloudbetTeamAliases();
-    const q = teamSearchQuery;
-    const aliases = q ? all.filter(a =>
-        a.merkur.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)
-    ) : all;
-    updateTeamSearchCount();
-    const list = document.getElementById('listClbTeams');
-
-    if (!all.length) {
-        list.innerHTML = `<div class="am-empty">No Cloudbet team aliases yet.</div>`;
-        return;
-    }
-    if (!aliases.length) {
-        list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`;
-        return;
-    }
-
-    list.innerHTML = aliases.map((a) => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">MRK</span>
-        <span class="am-alias-name">${esc(a.merkur)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill am-bk-cl">CLB</span>
-        <span class="am-alias-name">${esc(a.cloudbet)}</span>
-      </div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-mrk="${esc(a.merkur)}" data-clb="${esc(a.cloudbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddClbTeam').addEventListener('click', async () => {
-    const mrk = document.getElementById('inClbTeamMrk').value.trim();
-    const clb = document.getElementById('inClbTeamClb').value.trim();
-    if (!mrk || !clb) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await addCloudbetTeamAlias(mrk, clb);
-        document.getElementById('inClbTeamMrk').value = '';
-        document.getElementById('inClbTeamClb').value = '';
-        renderClbTeamList();
-        toast(`Synced: "${mrk}" → "${clb}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listClbTeams').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeCloudbetTeamAlias(btn.dataset.mrk, btn.dataset.clb);
-        renderClbTeamList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   CLOUDBET LEAGUE ALIASES
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function renderClbLeagueList() {
-    const all = getCloudbetLeagueAliases();
-    const q = leagueSearchQuery;
-    const aliases = q ? all.filter(a =>
-        a.merkur.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)
-    ) : all;
-    updateLeagueSearchCount();
-    const list = document.getElementById('listClbLeagues');
-
-    if (!all.length) {
-        list.innerHTML = `<div class="am-empty">No Cloudbet league aliases yet.</div>`;
-        return;
-    }
-    if (!aliases.length) {
-        list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`;
-        return;
-    }
-
-    list.innerHTML = aliases.map((a) => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">MRK</span>
-        <span class="am-alias-name">${esc(a.merkur)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill am-bk-cl">CLB</span>
-        <span class="am-alias-name">${esc(a.cloudbet)}</span>
-      </div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-mrk="${esc(a.merkur)}" data-clb="${esc(a.cloudbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddClbLeague').addEventListener('click', async () => {
-    const mrk = document.getElementById('inClbLeagueMrk').value.trim();
-    const clb = document.getElementById('inClbLeagueClb').value.trim();
-    if (!mrk || !clb) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await addCloudbetLeagueAlias(mrk, clb);
-        document.getElementById('inClbLeagueMrk').value = '';
-        document.getElementById('inClbLeagueClb').value = '';
-        renderClbLeagueList();
-        toast(`Synced: "${mrk}" → "${clb}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listClbLeagues').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeCloudbetLeagueAlias(btn.dataset.mrk, btn.dataset.clb);
-        renderClbLeagueList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   CROSS-BOOKIE ALIAS SECTIONS (MAX↔SBT, MAX↔CLB, SBT↔CLB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-
-function renderMbxSbtTeamList() {
-    const all = getMaxbetSbtTeamAliases();
-    const q = teamSearchQuery;
-    const aliases = q ? all.filter(a => a.maxbet.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)) : all;
-    updateTeamSearchCount();
-    const list = document.getElementById('listMbxSbtTeams');
-    if (!all.length) { list.innerHTML = `<div class="am-empty">No MaxBet↔SoccerBet team aliases yet.</div>`; return; }
-    if (!aliases.length) { list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`; return; }
-    list.innerHTML = aliases.map(a => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk"><span class="am-bk-pill am-bk-b">MAX</span><span class="am-alias-name">${esc(a.maxbet)}</span></div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx"><span class="am-bk-pill am-bk-s">SBT</span><span class="am-alias-name">${esc(a.soccerbet)}</span></div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-max="${esc(a.maxbet)}" data-sbt="${esc(a.soccerbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddMbxSbtTeam').addEventListener('click', async () => {
-    const max = document.getElementById('inMbxSbtTeamMax').value.trim();
-    const sbt = document.getElementById('inMbxSbtTeamSbt').value.trim();
-    if (!max || !sbt) { toast('Both fields are required', 'err'); return; }
-    try {
-        await addMaxbetSbtTeamAlias(max, sbt);
-        document.getElementById('inMbxSbtTeamMax').value = '';
-        document.getElementById('inMbxSbtTeamSbt').value = '';
-        renderMbxSbtTeamList();
-        toast(`Synced: "${max}" → "${sbt}"`);
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-document.getElementById('listMbxSbtTeams').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeMaxbetSbtTeamAlias(btn.dataset.max, btn.dataset.sbt);
-        renderMbxSbtTeamList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-function renderMbxClbTeamList() {
-    const all = getMaxbetClbTeamAliases();
-    const q = teamSearchQuery;
-    const aliases = q ? all.filter(a => a.maxbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)) : all;
-    updateTeamSearchCount();
-    const list = document.getElementById('listMbxClbTeams');
-    if (!all.length) { list.innerHTML = `<div class="am-empty">No MaxBet↔Cloudbet team aliases yet.</div>`; return; }
-    if (!aliases.length) { list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`; return; }
-    list.innerHTML = aliases.map(a => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk"><span class="am-bk-pill am-bk-b">MAX</span><span class="am-alias-name">${esc(a.maxbet)}</span></div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx"><span class="am-bk-pill am-bk-cl">CLB</span><span class="am-alias-name">${esc(a.cloudbet)}</span></div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-max="${esc(a.maxbet)}" data-clb="${esc(a.cloudbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddMbxClbTeam').addEventListener('click', async () => {
-    const max = document.getElementById('inMbxClbTeamMax').value.trim();
-    const clb = document.getElementById('inMbxClbTeamClb').value.trim();
-    if (!max || !clb) { toast('Both fields are required', 'err'); return; }
-    try {
-        await addMaxbetClbTeamAlias(max, clb);
-        document.getElementById('inMbxClbTeamMax').value = '';
-        document.getElementById('inMbxClbTeamClb').value = '';
-        renderMbxClbTeamList();
-        toast(`Synced: "${max}" → "${clb}"`);
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-document.getElementById('listMbxClbTeams').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeMaxbetClbTeamAlias(btn.dataset.max, btn.dataset.clb);
-        renderMbxClbTeamList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-function renderSbtClbTeamList() {
-    const all = getSbtClbTeamAliases();
-    const q = teamSearchQuery;
-    const aliases = q ? all.filter(a => a.soccerbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)) : all;
-    updateTeamSearchCount();
-    const list = document.getElementById('listSbtClbTeams');
-    if (!all.length) { list.innerHTML = `<div class="am-empty">No SoccerBet↔Cloudbet team aliases yet.</div>`; return; }
-    if (!aliases.length) { list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`; return; }
-    list.innerHTML = aliases.map(a => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk"><span class="am-bk-pill am-bk-s">SBT</span><span class="am-alias-name">${esc(a.soccerbet)}</span></div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx"><span class="am-bk-pill am-bk-cl">CLB</span><span class="am-alias-name">${esc(a.cloudbet)}</span></div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-sbt="${esc(a.soccerbet)}" data-clb="${esc(a.cloudbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddSbtClbTeam').addEventListener('click', async () => {
-    const sbt = document.getElementById('inSbtClbTeamSbt').value.trim();
-    const clb = document.getElementById('inSbtClbTeamClb').value.trim();
-    if (!sbt || !clb) { toast('Both fields are required', 'err'); return; }
-    try {
-        await addSbtClbTeamAlias(sbt, clb);
-        document.getElementById('inSbtClbTeamSbt').value = '';
-        document.getElementById('inSbtClbTeamClb').value = '';
-        renderSbtClbTeamList();
-        toast(`Synced: "${sbt}" → "${clb}"`);
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-document.getElementById('listSbtClbTeams').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeSbtClbTeamAlias(btn.dataset.sbt, btn.dataset.clb);
-        renderSbtClbTeamList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-function renderMbxSbtLeagueList() {
-    const all = getMaxbetSbtLeagueAliases();
-    const q = leagueSearchQuery;
-    const aliases = q ? all.filter(a => a.maxbet.toLowerCase().includes(q) || a.soccerbet.toLowerCase().includes(q)) : all;
-    updateLeagueSearchCount();
-    const list = document.getElementById('listMbxSbtLeagues');
-    if (!all.length) { list.innerHTML = `<div class="am-empty">No MaxBet↔SoccerBet league aliases yet.</div>`; return; }
-    if (!aliases.length) { list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`; return; }
-    list.innerHTML = aliases.map(a => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk"><span class="am-bk-pill am-bk-b">MAX</span><span class="am-alias-name">${esc(a.maxbet)}</span></div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx"><span class="am-bk-pill am-bk-s">SBT</span><span class="am-alias-name">${esc(a.soccerbet)}</span></div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-max="${esc(a.maxbet)}" data-sbt="${esc(a.soccerbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddMbxSbtLeague').addEventListener('click', async () => {
-    const max = document.getElementById('inMbxSbtLeagueMax').value.trim();
-    const sbt = document.getElementById('inMbxSbtLeagueSbt').value.trim();
-    if (!max || !sbt) { toast('Both fields are required', 'err'); return; }
-    try {
-        await addMaxbetSbtLeagueAlias(max, sbt);
-        document.getElementById('inMbxSbtLeagueMax').value = '';
-        document.getElementById('inMbxSbtLeagueSbt').value = '';
-        renderMbxSbtLeagueList();
-        toast(`Synced: "${max}" → "${sbt}"`);
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-document.getElementById('listMbxSbtLeagues').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeMaxbetSbtLeagueAlias(btn.dataset.max, btn.dataset.sbt);
-        renderMbxSbtLeagueList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-function renderMbxClbLeagueList() {
-    const all = getMaxbetClbLeagueAliases();
-    const q = leagueSearchQuery;
-    const aliases = q ? all.filter(a => a.maxbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)) : all;
-    updateLeagueSearchCount();
-    const list = document.getElementById('listMbxClbLeagues');
-    if (!all.length) { list.innerHTML = `<div class="am-empty">No MaxBet↔Cloudbet league aliases yet.</div>`; return; }
-    if (!aliases.length) { list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`; return; }
-    list.innerHTML = aliases.map(a => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk"><span class="am-bk-pill am-bk-b">MAX</span><span class="am-alias-name">${esc(a.maxbet)}</span></div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx"><span class="am-bk-pill am-bk-cl">CLB</span><span class="am-alias-name">${esc(a.cloudbet)}</span></div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-max="${esc(a.maxbet)}" data-clb="${esc(a.cloudbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddMbxClbLeague').addEventListener('click', async () => {
-    const max = document.getElementById('inMbxClbLeagueMax').value.trim();
-    const clb = document.getElementById('inMbxClbLeagueClb').value.trim();
-    if (!max || !clb) { toast('Both fields are required', 'err'); return; }
-    try {
-        await addMaxbetClbLeagueAlias(max, clb);
-        document.getElementById('inMbxClbLeagueMax').value = '';
-        document.getElementById('inMbxClbLeagueClb').value = '';
-        renderMbxClbLeagueList();
-        toast(`Synced: "${max}" → "${clb}"`);
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-document.getElementById('listMbxClbLeagues').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeMaxbetClbLeagueAlias(btn.dataset.max, btn.dataset.clb);
-        renderMbxClbLeagueList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-function renderSbtClbLeagueList() {
-    const all = getSbtClbLeagueAliases();
-    const q = leagueSearchQuery;
-    const aliases = q ? all.filter(a => a.soccerbet.toLowerCase().includes(q) || a.cloudbet.toLowerCase().includes(q)) : all;
-    updateLeagueSearchCount();
-    const list = document.getElementById('listSbtClbLeagues');
-    if (!all.length) { list.innerHTML = `<div class="am-empty">No SoccerBet↔Cloudbet league aliases yet.</div>`; return; }
-    if (!aliases.length) { list.innerHTML = `<div class="am-empty">No results for "${esc(q)}"</div>`; return; }
-    list.innerHTML = aliases.map(a => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk"><span class="am-bk-pill am-bk-s">SBT</span><span class="am-alias-name">${esc(a.soccerbet)}</span></div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx"><span class="am-bk-pill am-bk-cl">CLB</span><span class="am-alias-name">${esc(a.cloudbet)}</span></div>
-      <div class="am-alias-meta">${fmtDate(a.created_at)}</div>
-      <button class="am-alias-del" data-sbt="${esc(a.soccerbet)}" data-clb="${esc(a.cloudbet)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddSbtClbLeague').addEventListener('click', async () => {
-    const sbt = document.getElementById('inSbtClbLeagueSbt').value.trim();
-    const clb = document.getElementById('inSbtClbLeagueClb').value.trim();
-    if (!sbt || !clb) { toast('Both fields are required', 'err'); return; }
-    try {
-        await addSbtClbLeagueAlias(sbt, clb);
-        document.getElementById('inSbtClbLeagueSbt').value = '';
-        document.getElementById('inSbtClbLeagueClb').value = '';
-        renderSbtClbLeagueList();
-        toast(`Synced: "${sbt}" → "${clb}"`);
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-document.getElementById('listSbtClbLeagues').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-alias-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeSbtClbLeagueAlias(btn.dataset.sbt, btn.dataset.clb);
-        renderSbtClbLeagueList();
-        toast('Removed from Supabase', 'warn');
-    } catch (e) { toast('Database error: ' + e.message, 'err'); }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   GROUPS TAB
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function renderGroupList() {
-    const groups = getLeagueGroups();
-    document.getElementById('tabGroupCount').textContent = groups.length;
-    const list = document.getElementById('listGroups');
-
-    if (!groups.length) {
-        list.innerHTML = `<div class="am-empty">No manual league groups set.</div>`;
-        return;
-    }
-
-    list.innerHTML = groups.sort((a, b) => a.league_name.localeCompare(b.league_name)).map((a) => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">LG</span>
-        <span class="am-alias-name">${esc(a.league_name)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill am-bk-b">GRP</span>
-        <span class="am-alias-name">${esc(a.group_name)}</span>
-      </div>
-      <button class="am-alias-del am-group-del" data-name="${esc(a.league_name)}" title="Delete">✕</button>
-    </div>`).join('');
-
-    updateGroupSuggestions();
-}
-
-function updateGroupSuggestions() {
-    const groups = getLeagueGroups();
-    const uniqueGroups = new Set();
-
-    // Add "International" by default
-    uniqueGroups.add('International');
-
-    // Add existing manual groups
-    groups.forEach(g => uniqueGroups.add(g.group_name));
-
-    // Also look into existing aliases for country prefixes
-    getLeagueAliases().forEach(a => {
-        const c1 = a.merkur.includes(',') ? a.merkur.split(',')[0].trim() : null;
-        const c2 = a.maxbet.includes(',') ? a.maxbet.split(',')[0].trim() : null;
-        if (c1) uniqueGroups.add(c1);
-        if (c2) uniqueGroups.add(c2);
-    });
-
-    const datalist = document.getElementById('groupSuggestions');
-    if (!datalist) return;
-
-    datalist.innerHTML = [...uniqueGroups].sort().map(g => `<option value="${esc(g)}">`).join('');
-}
-
-document.getElementById('btnAddGroup').addEventListener('click', async () => {
-    const league = document.getElementById('inGroupLeague').value.trim();
-    const target = document.getElementById('inGroupTarget').value.trim();
-    if (!league || !target) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await setLeagueGroup(league, target);
-        document.getElementById('inGroupLeague').value = '';
-        document.getElementById('inGroupTarget').value = '';
-        renderGroupList();
-        toast(`Set: "${league}" in "${target}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listGroups').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-group-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeLeagueGroup(btn.dataset.name);
-        renderGroupList();
-        toast('Removed grouping override', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ── LEAGUE DISPLAY NAMES ──────────────────────────────────── */
-
-function renderDisplayNameList() {
-    const items = getLeagueDisplayNames();
-    const list = document.getElementById('listDisplayNames');
-
-    if (!items.length) {
-        list.innerHTML = `<div class="am-empty">No display name overrides set.</div>`;
-        return;
-    }
-
-    list.innerHTML = items
-        .sort((a, b) => a.merkur_name.localeCompare(b.merkur_name))
-        .map(d => `
-    <div class="am-alias-row">
-      <div class="am-alias-mrk">
-        <span class="am-bk-pill am-bk-m">MRK</span>
-        <span class="am-alias-name">${esc(d.merkur_name)}</span>
-      </div>
-      <div class="am-alias-arrow">→</div>
-      <div class="am-alias-mbx">
-        <span class="am-bk-pill" style="background:var(--clr-accent);color:#000;">DSP</span>
-        <span class="am-alias-name">${esc(d.display_name)}</span>
-      </div>
-      <button class="am-alias-del am-dn-del" data-mrk="${esc(d.merkur_name)}" title="Delete">✕</button>
-    </div>`).join('');
-}
-
-document.getElementById('btnAddDisplayName').addEventListener('click', async () => {
-    const merkur = document.getElementById('inDisplayMrk').value.trim();
-    const display = document.getElementById('inDisplayName').value.trim();
-    if (!merkur || !display) { toast('Both fields are required', 'err'); return; }
-
-    try {
-        await setLeagueDisplayName(merkur, display);
-        document.getElementById('inDisplayMrk').value = '';
-        document.getElementById('inDisplayName').value = '';
-        renderDisplayNameList();
-        toast(`Display name set: "${merkur}" → "${display}"`);
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-document.getElementById('listDisplayNames').addEventListener('click', async e => {
-    const btn = e.target.closest('.am-dn-del');
-    if (!btn) return;
-    if (!confirm('Delete this alias?')) return;
-    try {
-        await removeLeagueDisplayName(btn.dataset.mrk);
-        renderDisplayNameList();
-        toast('Display name override removed', 'warn');
-    } catch (e) {
-        toast('Database error: ' + e.message, 'err');
-    }
-});
-
-/* ── UNGROUPED FINDER ──────────────────────────────── */
-document.getElementById('btnLoadUngrouped').addEventListener('click', async () => {
-    const btn = document.getElementById('btnLoadUngrouped');
-    btn.textContent = '🔍 Scanning…';
-    btn.disabled = true;
-
-    try {
-        const [rMrk, rMbx, rSbt] = await Promise.all([
-            fetch(APIS.merkur),
-            fetch(APIS.maxbet),
-            fetch(APIS.soccerbet),
-        ]);
-        const [dMrk, dMbx, dSbt] = await Promise.all([rMrk.json(), rMbx.json(), rSbt.json()]);
-
-        const mrkMatches = (dMrk.esMatches || []).filter(m => m.sport === 'S');
-        const mbxMatches = (dMbx.esMatches || []).filter(m => m.sport === 'S' && !isMaxbetBonus(m));
-        const sbtMatches = (dSbt.esMatches || []).filter(m => m.sport === 'S' && !isSbtOutright(m));
-
-        const allLgs = new Set();
-        mrkMatches.forEach(m => allLgs.add(m.leagueName));
-        mbxMatches.forEach(m => allLgs.add(m.leagueName));
-        sbtMatches.forEach(m => allLgs.add(m.leagueName));
-
-        // Get normalized map of all aliased "canonical" names 
-        // that already provide a country prefix.
-        const aliasedWithCountry = new Set();
-        getLeagueAliases().forEach(a => {
-            if (a.merkur.includes(',') || a.maxbet.includes(',')) {
-                aliasedWithCountry.add(a.merkur);
-                aliasedWithCountry.add(a.maxbet);
-            }
-        });
-
-        // Filter for those that would fall into "Other"
-        const ungrouped = [...allLgs].filter(name => {
-            // Already manually grouped in Groups table?
-            if (getLeagueGroups().some(g => g.league_name === name)) return false;
-            // Has an alias that already provides a country?
-            if (aliasedWithCountry.has(name)) return false;
-            // Has a country comma in its own name?
-            if (name.includes(',')) return false;
-            // Hardcoded international?
-            if (name.toLowerCase().startsWith('international clubs')) return false;
-            return true;
-        }).sort();
-
-        const list = document.getElementById('listUngrouped');
-        const searchWrap = document.getElementById('ungroupedSearchWrap');
-        const searchInput = document.getElementById('ungroupedSearch');
-        const searchCount = document.getElementById('ungroupedSearchCount');
-
-        if (!ungrouped.length) {
-            list.innerHTML = `<div class="am-empty">No ungrouped leagues found! 🎉</div>`;
-            searchWrap.style.display = 'none';
-        } else {
-            const renderRows = (names) => names.map(name => `
-                <div class="am-alias-row" style="cursor:pointer" onclick="document.getElementById('inGroupLeague').value='${esc(name)}'; document.getElementById('inGroupTarget').focus()">
-                    <div class="am-alias-name">${esc(name)}</div>
-                    <div class="am-alias-meta">Click to assign</div>
-                </div>
-            `).join('');
-
-            list.innerHTML = renderRows(ungrouped);
-            searchCount.textContent = `${ungrouped.length} leagues`;
-            searchWrap.style.display = '';
-            searchInput.value = '';
-            searchInput.oninput = () => {
-                const q = searchInput.value.trim().toLowerCase();
-                const filtered = q ? ungrouped.filter(n => n.toLowerCase().includes(q)) : ungrouped;
-                list.innerHTML = filtered.length
-                    ? renderRows(filtered)
-                    : `<div class="am-empty">No matches for "${esc(searchInput.value)}"</div>`;
-                searchCount.textContent = q ? `${filtered.length} / ${ungrouped.length}` : `${ungrouped.length} leagues`;
-            };
-        }
-        toast(`Found ${ungrouped.length} ungrouped leagues`);
-    } catch (err) {
-        toast('Scan failed: ' + err.message, 'err');
-    } finally {
-        btn.textContent = '🔍 Scan for Ungrouped';
-        btn.disabled = false;
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   UNMATCHED TAB — LIVE DATA PICKER
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-
-function normName(s) {
-    return s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function isSbtOutright(m) {
-    const league = (m.leagueName || '').toLowerCase();
-    const home   = (m.home || '').toLowerCase();
-    const away   = (m.away || '').toLowerCase();
-    return league.includes('pobednik') || /\d{4}\/\d{2}/.test(league)
-        || home.includes('pobednik')   || away.includes('pobednik');
-}
-
-function isMaxbetBonus(m) {
-    return (m.leagueName || '').toLowerCase().includes('bonus');
-}
-
-/* ── Similarity / Suggestion Engine ──────────────────────── */
-function tokenJaccard(a, b) {
-    const tokA = new Set(a.split(' ').filter(Boolean));
-    const tokB = new Set(b.split(' ').filter(Boolean));
-    let inter = 0;
-    for (const t of tokA) if (tokB.has(t)) inter++;
-    const union = tokA.size + tokB.size - inter;
-    return union === 0 ? 0 : inter / union;
-}
-
-function nameSim(a, b) {
-    const na = normName(a);
-    const nb = normName(b);
-    if (na === nb) return 1;
-    const jac = tokenJaccard(na, nb);
-    const subBonus = (na.includes(nb) || nb.includes(na)) ? 0.25 : 0;
-    return Math.min(1, jac + subBonus);
-}
-
-function computeSuggestions(fromList, toList) {
-    const THRESHOLD = 0.25;
-    const MAX_ITEMS = 300; // cap to avoid O(n²) on large datasets
-    const MAX_RESULTS = 10;
-    const from = fromList.slice(0, MAX_ITEMS);
-    const to = toList.slice(0, MAX_ITEMS);
-    const scored = [];
-    for (const m of from) {
-        let best = null;
-        for (const o of to) {
-            const score = nameSim(m.name, o.name);
-            if (score >= THRESHOLD && (!best || score > best.score)) {
-                best = { mrk: m.name, other: o.name, score };
-            }
-        }
-        if (best) scored.push(best);
-    }
-    return scored.sort((a, b) => b.score - a.score).slice(0, MAX_RESULTS);
-}
-
-// Recompute suggestions from current lists and re-render.
-// Call this after loading new data or changing modes.
-function refreshSuggestions() {
-    const fromList = browseAll ? allMrkItems : unmatchedMrk;
-    const toList = browseAll ? allOtherItems : unmatchedMbx;
-    cachedSuggestions = computeSuggestions(fromList, toList);
-    renderSuggestions();
-}
-
-// Render from cachedSuggestions only — does NOT recompute.
-function renderSuggestions() {
-    const container = document.getElementById('listSuggestions');
-    if (!container) return;
-    const bulkBtn = document.getElementById('btnBulkSaveSuggestions');
-
-    const fromList = browseAll ? allMrkItems : unmatchedMrk;
-    const toList = browseAll ? allOtherItems : unmatchedMbx;
-
-    if (!fromList.length || !toList.length) {
-        container.innerHTML = '<div class="am-sug-empty">Load data to see suggestions</div>';
-        if (bulkBtn) bulkBtn.disabled = true;
-        return;
-    }
-
-    if (!cachedSuggestions.length) {
-        container.innerHTML = '<div class="am-sug-empty">No close matches found</div>';
-        if (bulkBtn) bulkBtn.disabled = true;
-        return;
-    }
-
-    if (bulkBtn) bulkBtn.disabled = false;
-    const otherClass = pickerTarget === 'sbt' ? 'am-sug-sbt' : pickerTarget === 'clb' ? 'am-sug-clb' : 'am-sug-mbx';
-    container.innerHTML = cachedSuggestions.map(s => `
-        <div class="am-sug-item" data-mrk="${esc(s.mrk)}" data-other="${esc(s.other)}">
-            <div class="am-sug-score">${Math.round(s.score * 100)}%</div>
-            <div class="am-sug-names">
-                <div class="am-sug-name am-sug-mrk">${esc(s.mrk)}</div>
-                <div class="am-sug-name ${otherClass}">${esc(s.other)}</div>
-            </div>
-        </div>`).join('');
-}
-
-document.getElementById('btnBulkSaveSuggestions').addEventListener('click', async () => {
-    const btn = document.getElementById('btnBulkSaveSuggestions');
-    const pairs = [...cachedSuggestions];
-    if (!pairs.length) return;
-
-    btn.disabled = true;
-    btn.textContent = '…';
-    let saved = 0, failed = 0;
-
-    const cfg = ALIAS_CONFIG[`${pickerSource}-${pickerTarget}`];
-    for (const { mrk, other } of pairs) {
-        try {
-            if (leagueMode) await cfg.addLeagueAlias(mrk, other);
-            else await cfg.addTeamAlias(mrk, other);
-            unmatchedMrk = unmatchedMrk.filter(t => t.name !== mrk);
-            unmatchedMbx = unmatchedMbx.filter(t => t.name !== other);
-            cachedSuggestions = cachedSuggestions.filter(s => s.mrk !== mrk || s.other !== other);
-            saved++;
-        } catch {
-            failed++;
-        }
-    }
-
-    if (leagueMode) cfg.renderLeagueList(); else cfg.renderTeamList();
-
-    selMrk = selMbx = null;
-    document.getElementById('tabUnmatchedCount').textContent =
-        unmatchedMrk.length + unmatchedMbx.length;
-    renderPicker();
-
-    if (failed > 0) toast(`Saved ${saved}, ${failed} failed`, 'warn');
-    else toast(`Bulk saved ${saved} aliases`);
-});
-
-document.getElementById('listSuggestions').addEventListener('click', e => {
-    const item = e.target.closest('.am-sug-item');
-    if (!item) return;
-    selMrk = item.dataset.mrk;
-    selMbx = item.dataset.other;
-    renderPicker();
-    // Scroll selected items into view
-    setTimeout(() => {
-        const mrkEl = document.querySelector(`[data-name="${CSS.escape(selMrk)}"][data-side="mrk"]`);
-        const mbxEl = document.querySelector(`[data-name="${CSS.escape(selMbx)}"][data-side="mbx"]`);
-        if (mrkEl) mrkEl.scrollIntoView({ block: 'nearest' });
-        if (mbxEl) mbxEl.scrollIntoView({ block: 'nearest' });
-    }, 0);
-});
-
-document.getElementById('btnLoadUnmatched').addEventListener('click', loadUnmatched);
-document.getElementById('pickerPairSel').addEventListener('change', e => {
-    [pickerSource, pickerTarget] = e.target.value.split('-');
-    selMrk = selMbx = null;
-    unmatchedMrk = [];
-    unmatchedMbx = [];
-    allMrkItems = [];
-    allOtherItems = [];
-    cachedSuggestions = [];
-    leagueFilterMrk = leagueFilterMbx = '';
-    document.getElementById('leagueFilterMrk').value = '';
-    document.getElementById('leagueFilterMbx').value = '';
-    renderPicker();
-});
-document.getElementById('chkLeagueMode').addEventListener('change', e => {
-    leagueMode = e.target.checked;
-    selMrk = selMbx = null;
-    allMrkItems = [];
-    allOtherItems = [];
-    cachedSuggestions = [];
-    leagueFilterMrk = leagueFilterMbx = '';
-    document.getElementById('leagueFilterMrk').value = '';
-    document.getElementById('leagueFilterMbx').value = '';
-    renderPicker();
-});
-document.getElementById('chkBrowseAll').addEventListener('change', e => {
-    browseAll = e.target.checked;
-    selMrk = selMbx = null;
-    cachedSuggestions = [];
-    renderPicker();
-    if (allMrkItems.length || allOtherItems.length) refreshSuggestions();
-});
-document.getElementById('unmatchedSearch').addEventListener('input', e => {
-    filterQuery = e.target.value.toLowerCase();
-    renderPicker();
-});
-document.getElementById('leagueFilterMrk').addEventListener('input', e => {
-    leagueFilterMrk = e.target.value;
-    renderPicker();
-});
-document.getElementById('leagueFilterMbx').addEventListener('input', e => {
-    leagueFilterMbx = e.target.value;
-    renderPicker();
-});
-
-function populateLeagueDatalist() {
-    const srcLeagues = [...new Set(allMrkItems.flatMap(t => t.leagues))].sort();
-    const tgtLeagues = [...new Set(allOtherItems.flatMap(t => t.leagues))].sort();
-    document.getElementById('leaguesMrkList').innerHTML =
-        srcLeagues.map(l => `<option value="${esc(l)}">`).join('');
-    document.getElementById('leaguesMbxList').innerHTML =
-        tgtLeagues.map(l => `<option value="${esc(l)}">`).join('');
-}
-
-async function loadUnmatched() {
-    const btn = document.getElementById('btnLoadUnmatched');
-    btn.textContent = '⟳ Loading…';
-    btn.disabled = true;
-
-    try {
-        const [srcResp, tgtResp] = await Promise.all([
-            BK_META[pickerSource].api(),
-            BK_META[pickerTarget].api(),
-        ]);
-        const [srcData, tgtData] = await Promise.all([srcResp.json(), tgtResp.json()]);
-        const srcMatches = parseForBookie(pickerSource, srcData);
-        const tgtMatches = parseForBookie(pickerTarget, tgtData);
-
-        if (leagueMode) buildLeagueUnmatched(srcMatches, tgtMatches);
-        else buildTeamUnmatched(srcMatches, tgtMatches);
-
-        leagueFilterMrk = leagueFilterMbx = '';
-        document.getElementById('leagueFilterMrk').value = '';
-        document.getElementById('leagueFilterMbx').value = '';
-        populateLeagueDatalist();
-        renderPicker();
-        refreshSuggestions();
-        toast(`Loaded live data from APIs`);
-    } catch (err) {
-        toast('Failed to load: ' + err.message, 'err');
-    } finally {
-        btn.textContent = '⟳ Load Live Data';
-        btn.disabled = false;
-    }
-}
-
-/* Lookup table for all 6 bookie pairs — drives unmatched build, save, and render. */
-const ALIAS_CONFIG = {
-    'mrk-max': { getTeamAliases: getTeamAliases,            srcKey: 'merkur',    tgtKey: 'maxbet',
-                 getLeagueAliases: getLeagueAliases,
-                 addTeamAlias: addTeamAlias,                addLeagueAlias: addLeagueAlias,
-                 renderTeamList: renderTeamList,            renderLeagueList: renderLeagueList },
-    'mrk-sbt': { getTeamAliases: getSoccerbetTeamAliases,   srcKey: 'merkur',    tgtKey: 'soccerbet',
-                 getLeagueAliases: getSoccerbetLeagueAliases,
-                 addTeamAlias: addSoccerbetTeamAlias,       addLeagueAlias: addSoccerbetLeagueAlias,
-                 renderTeamList: renderSbtTeamList,         renderLeagueList: renderSbtLeagueList },
-    'mrk-clb': { getTeamAliases: getCloudbetTeamAliases,    srcKey: 'merkur',    tgtKey: 'cloudbet',
-                 getLeagueAliases: getCloudbetLeagueAliases,
-                 addTeamAlias: addCloudbetTeamAlias,        addLeagueAlias: addCloudbetLeagueAlias,
-                 renderTeamList: renderClbTeamList,         renderLeagueList: renderClbLeagueList },
-    'max-sbt': { getTeamAliases: getMaxbetSbtTeamAliases,   srcKey: 'maxbet',    tgtKey: 'soccerbet',
-                 getLeagueAliases: getMaxbetSbtLeagueAliases,
-                 addTeamAlias: addMaxbetSbtTeamAlias,       addLeagueAlias: addMaxbetSbtLeagueAlias,
-                 renderTeamList: renderMbxSbtTeamList,      renderLeagueList: renderMbxSbtLeagueList },
-    'max-clb': { getTeamAliases: getMaxbetClbTeamAliases,   srcKey: 'maxbet',    tgtKey: 'cloudbet',
-                 getLeagueAliases: getMaxbetClbLeagueAliases,
-                 addTeamAlias: addMaxbetClbTeamAlias,       addLeagueAlias: addMaxbetClbLeagueAlias,
-                 renderTeamList: renderMbxClbTeamList,      renderLeagueList: renderMbxClbLeagueList },
-    'sbt-clb': { getTeamAliases: getSbtClbTeamAliases,      srcKey: 'soccerbet', tgtKey: 'cloudbet',
-                 getLeagueAliases: getSbtClbLeagueAliases,
-                 addTeamAlias: addSbtClbTeamAlias,          addLeagueAlias: addSbtClbLeagueAlias,
-                 renderTeamList: renderSbtClbTeamList,      renderLeagueList: renderSbtClbLeagueList },
-};
-
-function buildTeamUnmatched(srcMatches, otherMatches) {
-    const srcTeams   = new Map();
-    const otherTeams = new Map();
-
-    srcMatches.forEach(m => {
-        [m.home, m.away].forEach(t => {
-            const n = normName(t);
-            if (!srcTeams.has(n)) srcTeams.set(n, { original: t, leagues: new Set() });
-            srcTeams.get(n).leagues.add(m.leagueName);
-        });
-    });
-    otherMatches.forEach(m => {
-        [m.home, m.away].forEach(t => {
-            const n = normName(t);
-            if (!otherTeams.has(n)) otherTeams.set(n, { original: t, leagues: new Set() });
-            otherTeams.get(n).leagues.add(m.leagueName);
-        });
-    });
-
-    const cfg = ALIAS_CONFIG[`${pickerSource}-${pickerTarget}`];
-    const aliasedSrc   = new Set(cfg.getTeamAliases().map(a => normName(a[cfg.srcKey])));
-    const aliasedOther = new Set(cfg.getTeamAliases().map(a => normName(a[cfg.tgtKey])));
-
-    allMrkItems = [...srcTeams.entries()]
-        .map(([, v]) => ({ name: v.original, leagues: [...v.leagues] }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    allOtherItems = [...otherTeams.entries()]
-        .map(([, v]) => ({ name: v.original, leagues: [...v.leagues] }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    unmatchedMrk = [...srcTeams.entries()]
-        .filter(([n]) => !otherTeams.has(n) && !aliasedSrc.has(n))
-        .map(([, v]) => ({ name: v.original, leagues: [...v.leagues] }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    unmatchedMbx = [...otherTeams.entries()]
-        .filter(([n]) => !srcTeams.has(n) && !aliasedOther.has(n))
-        .map(([, v]) => ({ name: v.original, leagues: [...v.leagues] }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    document.getElementById('tabUnmatchedCount').textContent =
-        unmatchedMrk.length + unmatchedMbx.length;
-}
-
-function buildLeagueUnmatched(srcMatches, otherMatches) {
-    const srcLeagues   = new Map();
-    const otherLeagues = new Map();
-
-    srcMatches.forEach(m => {
-        if (!srcLeagues.has(m.leagueName))
-            srcLeagues.set(m.leagueName, { original: m.leagueName, count: 0 });
-        srcLeagues.get(m.leagueName).count++;
-    });
-    otherMatches.forEach(m => {
-        if (!otherLeagues.has(m.leagueName))
-            otherLeagues.set(m.leagueName, { original: m.leagueName, count: 0 });
-        otherLeagues.get(m.leagueName).count++;
-    });
-
-    const cfg = ALIAS_CONFIG[`${pickerSource}-${pickerTarget}`];
-    const aliasedSrc   = new Set(cfg.getLeagueAliases().map(a => a[cfg.srcKey]));
-    const aliasedOther = new Set(cfg.getLeagueAliases().map(a => a[cfg.tgtKey]));
-
-    allMrkItems = [...srcLeagues.values()]
-        .sort((a, b) => a.original.localeCompare(b.original))
-        .map(v => ({ name: v.original, leagues: [`${v.count} matches`] }));
-
-    allOtherItems = [...otherLeagues.values()]
-        .sort((a, b) => a.original.localeCompare(b.original))
-        .map(v => ({ name: v.original, leagues: [`${v.count} matches`] }));
-
-    unmatchedMrk = [...srcLeagues.values()]
-        .filter(v => !otherLeagues.has(v.original) && !aliasedSrc.has(v.original))
-        .sort((a, b) => a.original.localeCompare(b.original))
-        .map(v => ({ name: v.original, leagues: [`${v.count} matches`] }));
-
-    unmatchedMbx = [...otherLeagues.values()]
-        .filter(v => !srcLeagues.has(v.original) && !aliasedOther.has(v.original))
-        .sort((a, b) => a.original.localeCompare(b.original))
-        .map(v => ({ name: v.original, leagues: [`${v.count} matches`] }));
-
-    document.getElementById('tabUnmatchedCount').textContent =
-        unmatchedMrk.length + unmatchedMbx.length;
-}
-
-function renderPicker() {
-    const q = filterQuery;
-
-    // Update both column headers to reflect current pair
-    document.getElementById('pickerSrcDot').className    = `am-bk-dot ${BK_META[pickerSource].dotCls}`;
-    document.getElementById('pickerSrcLabel').textContent = BK_META[pickerSource].label;
-    document.getElementById('pickerOtherDot').className  = `am-bk-dot ${BK_META[pickerTarget].dotCls}`;
-    document.getElementById('pickerOtherLabel').textContent = BK_META[pickerTarget].label;
-
-    // Choose source lists based on browseAll toggle
-    const currentMrk = browseAll ? allMrkItems : unmatchedMrk;
-    const currentMbx = browseAll ? allOtherItems : unmatchedMbx;
-
-    const lqMrk = leagueFilterMrk.toLowerCase();
-    const lqMbx = leagueFilterMbx.toLowerCase();
-
-    const filteredMrk = currentMrk.filter(t => {
-        if (q && !t.name.toLowerCase().includes(q) && !t.leagues.some(l => l.toLowerCase().includes(q))) return false;
-        if (lqMrk && !t.leagues.some(l => l.toLowerCase().includes(lqMrk))) return false;
-        return true;
-    });
-    const filteredMbx = currentMbx.filter(t => {
-        if (q && !t.name.toLowerCase().includes(q) && !t.leagues.some(l => l.toLowerCase().includes(q))) return false;
-        if (lqMbx && !t.leagues.some(l => l.toLowerCase().includes(lqMbx))) return false;
-        return true;
-    });
-
-    document.getElementById('pickerMrkCount').textContent = filteredMrk.length;
-    document.getElementById('pickerMbxCount').textContent = filteredMbx.length;
-
-    document.getElementById('listMrk').innerHTML = filteredMrk.length
-        ? filteredMrk.map(t => `
-        <div class="am-pick-item${selMrk === t.name ? ' selected' : ''}"
-             data-name="${esc(t.name)}" data-side="mrk">
-          <div class="am-pick-name">${esc(t.name)}</div>
-          <div class="am-pick-leagues">${t.leagues.slice(0, 2).map(l => esc(l)).join(' · ')}</div>
-        </div>`).join('')
-        : `<div class="am-picker-empty">${browseAll ? 'No items found' : 'All matched ✓'}</div>`;
-
-    document.getElementById('listMbx').innerHTML = filteredMbx.length
-        ? filteredMbx.map(t => `
-        <div class="am-pick-item${selMbx === t.name ? ' selected' : ''}"
-             data-name="${esc(t.name)}" data-side="mbx">
-          <div class="am-pick-name">${esc(t.name)}</div>
-          <div class="am-pick-leagues">${t.leagues.slice(0, 2).map(l => esc(l)).join(' · ')}</div>
-        </div>`).join('')
-        : `<div class="am-picker-empty">${browseAll ? 'No items found' : 'All matched ✓'}</div>`;
-
-    document.getElementById('pendingMrk').textContent = selMrk || '—';
-    document.getElementById('pendingMbx').textContent = selMbx || '—';
-    document.getElementById('btnSavePair').disabled = !(selMrk && selMbx);
-
-    renderSuggestions();
-}
-
-document.getElementById('btnClearSel').addEventListener('click', () => {
-    selMrk = selMbx = null;
-    renderPicker();
-});
-
-document.getElementById('picker').addEventListener('click', e => {
-    const item = e.target.closest('.am-pick-item');
-    if (!item) return;
-    const { name, side } = item.dataset;
-    if (side === 'mrk') selMrk = selMrk === name ? null : name;
-    else selMbx = selMbx === name ? null : name;
-    renderPicker();
-});
-
-document.getElementById('btnSavePair').addEventListener('click', async () => {
-    const mrk = selMrk;
-    const mbx = selMbx;
-    if (!mrk || !mbx) return;
-
-    try {
-        const cfg = ALIAS_CONFIG[`${pickerSource}-${pickerTarget}`];
-        if (leagueMode) {
-            await cfg.addLeagueAlias(mrk, mbx);
-            cfg.renderLeagueList();
-        } else {
-            await cfg.addTeamAlias(mrk, mbx);
-            cfg.renderTeamList();
-        }
-        unmatchedMrk = unmatchedMrk.filter(t => t.name !== mrk);
-        unmatchedMbx = unmatchedMbx.filter(t => t.name !== mbx);
-        cachedSuggestions = cachedSuggestions.filter(s => s.mrk !== mrk || s.other !== mbx);
-        selMrk = selMbx = null;
-        renderPicker();
-        toast('Saved & Synced');
-    } catch (e) {
-        toast('Sync failed: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   LEGACY / MIGRATION
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-
-document.getElementById('btnImportConfirm').addEventListener('click', async () => {
-    try {
-        const text = document.getElementById('importText').value;
-        await importAliasesFromJSON(text);
-        document.getElementById('importModal').classList.remove('open');
-        renderTeamList();
-        renderLeagueList();
-        toast('Migration complete! All data uploaded to Supabase.');
-    } catch (e) {
-        toast('Import failed: ' + e.message, 'err');
-    }
-});
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   UTILS
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+/* ── State ─────────────────────────────────────────────────── */
+let mode         = 'browse';
+let entityType   = 'teams';
+let browseSearch = '';
+let selectedId   = null;
+let addAliasBk   = 'merkur';
+
+let discEntityType   = 'teams';
+let discLoaded       = false;
+let discColSearch    = { merkur: '', maxbet: '', soccerbet: '', cloudbet: '' }; // per-column search filter
+let discUnmappedOnly = false;
+let discData         = { merkur: [], maxbet: [], soccerbet: [], cloudbet: [] };
+let discSel          = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
+let discAutoSel      = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null }; // auto-suggested (not manually confirmed)
+let discAssignSearch = '';
+let discAssignSelId  = null;   // canonical id chosen in assign panel
+let discSaving       = false;
+
+/* ── Cached mappings for discover mode (avoid repeated API calls) ── */
+let _discAliasCache = null;      // Map<"bk:rawName", alias object>
+let _discCanonicalCache = null;  // Map<canonical_id, canonical name>
+
+let _nameCacheLoaded = false;
+
+/* ── Utils ─────────────────────────────────────────────────── */
 function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-
 function fmtDate(ts) {
     if (!ts) return '';
     const d = new Date(ts);
     return `${d.getDate()}/${d.getMonth() + 1} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
-
-/* ── League name datalists ──────────────────────────────────── */
-let _nameCacheLoaded = false;
-
-function populateDatalist(id, names) {
-    const dl = document.getElementById(id);
-    if (!dl) return;
-    dl.innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
+function normName(s) {
+    return s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function tokenJaccard(a, b) {
+    const tA = new Set(a.split(' ').filter(Boolean)), tB = new Set(b.split(' ').filter(Boolean));
+    let inter = 0;
+    for (const t of tA) if (tB.has(t)) inter++;
+    const union = tA.size + tB.size - inter;
+    return union === 0 ? 0 : inter / union;
+}
+function nameSim(a, b) {
+    const na = normName(a), nb = normName(b);
+    if (na === nb) return 1;
+    const jac = tokenJaccard(na, nb);
+    return Math.min(1, jac + ((na.includes(nb) || nb.includes(na)) ? 0.25 : 0));
 }
 
-async function ensureNameCache() {
-    if (_nameCacheLoaded) return;
-    _nameCacheLoaded = true; // mark early to prevent double-fetch
+/* ── Toast ─────────────────────────────────────────────────── */
+let _toastTimer;
+function toast(msg, type = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `am-toast show am-toast-${type}`;
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MODE SWITCHING
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.am-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    document.querySelectorAll('.am-mode-panel').forEach(p => p.classList.toggle('active', p.id === `mode${m.charAt(0).toUpperCase() + m.slice(1)}`));
+}
+document.querySelectorAll('.am-mode-btn').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   BROWSE MODE
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* ── Entity type toggle ────────────────────────────────────── */
+document.querySelectorAll('.am-ent-btn[data-type]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        entityType = btn.dataset.type;
+        selectedId = null;
+        browseSearch = '';
+        document.getElementById('browseSearch').value = '';
+        document.querySelectorAll('.am-ent-btn[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === entityType));
+        renderBrowseList();
+        renderBrowseDetail();
+    });
+});
+
+document.getElementById('browseSearch').addEventListener('input', e => {
+    browseSearch = e.target.value.toLowerCase();
+    renderBrowseList();
+});
+
+/* ── Browse list ───────────────────────────────────────────── */
+function getEnrichedList() {
+    const entities  = entityType === 'teams' ? getCanonicalTeams() : getCanonicalLeagues();
+    const allAliases = entityType === 'teams' ? getBookieTeamAliases() : getBookieLeagueAliases();
+    const q = browseSearch;
+    return entities
+        .filter(e => !q || e.name.toLowerCase().includes(q))
+        .map(e => {
+            const aliases = allAliases.filter(a => a.canonical_id === e.id);
+            const cov = {};
+            BK_KEYS.forEach(bk => { cov[bk] = aliases.some(a => a.bookie_key === bk); });
+            return { ...e, aliases, cov };
+        });
+}
+
+function renderBrowseList() {
+    const teams   = getCanonicalTeams();
+    const leagues = getCanonicalLeagues();
+    document.getElementById('browseTeamCount').textContent   = teams.length;
+    document.getElementById('browseLeagueCount').textContent = leagues.length;
+
+    const list = getEnrichedList();
+    const el   = document.getElementById('browseList');
+    if (!list.length) {
+        el.innerHTML = `<div class="am-empty">${browseSearch ? `No results for "${esc(browseSearch)}"` : 'No entities yet — click + New to create one.'}</div>`;
+        return;
+    }
+    el.innerHTML = list.map(e => `
+        <div class="am-browse-item${selectedId === e.id ? ' selected' : ''}" data-id="${e.id}">
+            <div class="am-browse-name">${esc(e.name)}</div>
+            <div class="am-browse-bks">
+                ${BK_KEYS.map(bk => `<span class="am-bk-dot ${BK_META[bk].dotCls}${e.cov[bk] ? '' : ' am-dot-dim'}" title="${BK_META[bk].label}"></span>`).join('')}
+            </div>
+        </div>`).join('');
+}
+
+document.getElementById('browseList').addEventListener('click', e => {
+    const item = e.target.closest('.am-browse-item');
+    if (!item) return;
+    selectedId = parseInt(item.dataset.id, 10);
+    renderBrowseList();
+    renderBrowseDetail();
+});
+
+/* ── Browse detail ─────────────────────────────────────────── */
+function renderBrowseDetail() {
+    const el = document.getElementById('browseDetail');
+    if (!selectedId) {
+        el.innerHTML = `<div class="am-detail-empty">Select an entity from the left</div>`;
+        return;
+    }
+    const entities  = entityType === 'teams' ? getCanonicalTeams() : getCanonicalLeagues();
+    const entity    = entities.find(e => e.id === selectedId);
+    if (!entity) { el.innerHTML = `<div class="am-detail-empty">Entity not found</div>`; return; }
+
+    const aliases    = (entityType === 'teams' ? getBookieTeamAliases() : getBookieLeagueAliases())
+        .filter(a => a.canonical_id === selectedId);
+
+    // Alias rows grouped by bookie
+    const aliasRows = BK_KEYS.map(bk => {
+        const bkAliases = aliases.filter(a => a.bookie_key === bk);
+        if (!bkAliases.length) return `
+            <div class="am-detail-bk-row am-detail-bk-empty">
+                <span class="am-bk-dot ${BK_META[bk].dotCls} am-dot-dim"></span>
+                <span class="am-detail-no-alias">${BK_META[bk].label} — no alias</span>
+            </div>`;
+        return bkAliases.map(a => `
+            <div class="am-detail-bk-row">
+                <span class="am-bk-pill ${BK_META[bk].pillCls}">${BK_META[bk].shortLabel}</span>
+                <span class="am-detail-alias-name">${esc(a.raw_name)}</span>
+                <span class="am-detail-alias-date">${fmtDate(a.created_at)}</span>
+                <button class="am-alias-del" data-alias-id="${a.id}" title="Remove">✕</button>
+            </div>`).join('');
+    }).join('');
+
+    // League-only fields
+    const leagueFields = entityType === 'leagues' ? `
+        <div class="am-detail-section">
+            <div class="am-detail-section-title">League settings</div>
+            <div class="am-detail-field">
+                <label class="am-label">Display name</label>
+                <div class="am-detail-field-row">
+                    <input class="am-input" id="fldDisplayName" value="${esc(entity.display_name || '')}" placeholder="Custom UI label…" />
+                    <button class="am-btn am-btn-ghost am-field-save" data-field="display_name">Save</button>
+                </div>
+            </div>
+            <div class="am-detail-field">
+                <label class="am-label">Country</label>
+                <div class="am-detail-field-row">
+                    <input class="am-input" id="fldCountry" value="${esc(entity.country || '')}" placeholder="e.g. England" />
+                    <button class="am-btn am-btn-ghost am-field-save" data-field="country">Save</button>
+                </div>
+            </div>
+            <div class="am-detail-field">
+                <label class="am-label">Group</label>
+                <div class="am-detail-field-row">
+                    <input class="am-input" id="fldGroupName" value="${esc(entity.group_name || '')}" placeholder="e.g. International" />
+                    <button class="am-btn am-btn-ghost am-field-save" data-field="group_name">Save</button>
+                </div>
+            </div>
+        </div>` : '';
+
+    const dlMap = {
+        merkur:    entityType === 'teams' ? 'dlMrkTeams' : 'dlMrkLeagues',
+        maxbet:    entityType === 'teams' ? 'dlMaxTeams' : 'dlMaxLeagues',
+        soccerbet: entityType === 'teams' ? 'dlSbtTeams' : 'dlSbtLeagues',
+        cloudbet:  entityType === 'teams' ? 'dlClbTeams' : 'dlClbLeagues',
+    };
+
+    el.innerHTML = `
+        <div class="am-detail-inner">
+            <div class="am-detail-header">
+                <div class="am-detail-title">${esc(entity.name)}</div>
+                <button class="am-btn am-btn-danger am-detail-delete" data-id="${entity.id}">✕ Delete</button>
+            </div>
+
+            <div class="am-detail-aliases">${aliasRows}</div>
+
+            <div class="am-detail-add-form">
+                <select class="am-input am-detail-bk-sel" id="addAliasBkSel">
+                    ${BK_KEYS.map(bk => `<option value="${bk}"${bk === addAliasBk ? ' selected' : ''}>${BK_META[bk].label}</option>`).join('')}
+                </select>
+                <input class="am-input" id="addAliasRaw" list="${dlMap[addAliasBk]}"
+                       placeholder="Raw name on bookie…" autocomplete="off" />
+                <button class="am-btn am-btn-primary" id="btnAddAlias">+ Add</button>
+            </div>
+
+            ${leagueFields}
+        </div>`;
+
+    // Bookie selector → update datalist
+    document.getElementById('addAliasBkSel').addEventListener('change', e => {
+        addAliasBk = e.target.value;
+        document.getElementById('addAliasRaw').setAttribute('list', dlMap[addAliasBk]);
+    });
+
+    // Save league field
+    el.querySelectorAll('.am-field-save').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const field = btn.dataset.field;
+            const inputMap = { display_name: 'fldDisplayName', country: 'fldCountry', group_name: 'fldGroupName' };
+            const val = document.getElementById(inputMap[field])?.value.trim() || null;
+            try {
+                await updateCanonical('leagues', selectedId, { [field]: val || null });
+                toast(`Saved: ${field.replace('_', ' ')}`);
+                renderBrowseList();
+            } catch (e) { toast('Save failed: ' + e.message, 'err'); }
+        });
+    });
+
+    // Delete alias
+    el.querySelector('.am-detail-aliases').addEventListener('click', async e => {
+        const btn = e.target.closest('.am-alias-del');
+        if (!btn) return;
+        if (!confirm('Remove this alias?')) return;
+        try {
+            await removeBookieAlias(entityType, parseInt(btn.dataset.aliasId, 10));
+            renderBrowseList();
+            renderBrowseDetail();
+            toast('Alias removed', 'warn');
+        } catch (e) { toast('Remove failed: ' + e.message, 'err'); }
+    });
+
+    // Delete entity
+    el.querySelector('.am-detail-delete').addEventListener('click', async () => {
+        if (!confirm(`Delete canonical entity "${entity.name}" and all its aliases? This cannot be undone.`)) return;
+        try {
+            await deleteCanonical(entityType, entity.id);
+            selectedId = null;
+            renderBrowseList();
+            renderBrowseDetail();
+            toast('Entity deleted', 'warn');
+        } catch (e) { toast('Delete failed: ' + e.message, 'err'); }
+    });
+
+    // Add alias button
+    document.getElementById('btnAddAlias').addEventListener('click', async () => {
+        const bk  = document.getElementById('addAliasBkSel').value;
+        const raw = document.getElementById('addAliasRaw').value.trim();
+        if (!raw) { toast('Enter a name first', 'err'); return;  }
+        try {
+            await addBookieAlias(entityType, bk, raw, selectedId);
+            document.getElementById('addAliasRaw').value = '';
+            renderBrowseList();
+            renderBrowseDetail();
+            toast(`Added: [${BK_META[bk].shortLabel}] ${raw}`);
+        } catch (e) { toast('Add failed: ' + e.message, 'err'); }
+    });
+
+    ensureNameCache();
+}
+
+/* ── New entity ────────────────────────────────────────────── */
+document.getElementById('btnNewEntity').addEventListener('click', () => {
+    document.getElementById('newEntityModalTitle').textContent = entityType === 'teams' ? 'New Team' : 'New League';
+    document.getElementById('newEntityLeagueFields').style.display = entityType === 'leagues' ? '' : 'none';
+    document.getElementById('newEntityName').value = '';
+    document.getElementById('newEntityCountry').value = '';
+    document.getElementById('newEntityGroup').value = '';
+    document.getElementById('newEntityDisplay').value = '';
+    document.getElementById('newEntityModal').classList.add('open');
+    document.getElementById('newEntityName').focus();
+});
+
+document.getElementById('btnNewEntityCancel').addEventListener('click', () => {
+    document.getElementById('newEntityModal').classList.remove('open');
+});
+
+document.getElementById('newEntityName').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btnNewEntityConfirm').click();
+});
+
+document.getElementById('btnNewEntityConfirm').addEventListener('click', async () => {
+    const name = document.getElementById('newEntityName').value.trim();
+    if (!name) { toast('Name is required', 'err'); return; }
     try {
-        const [rMrk, rMbx, rSbt, rClb] = await Promise.all([
+        const extras = {
+            country:      document.getElementById('newEntityCountry')?.value.trim() || null,
+            group_name:   document.getElementById('newEntityGroup')?.value.trim() || null,
+            display_name: document.getElementById('newEntityDisplay')?.value.trim() || null,
+        };
+        const entity = await addCanonical(entityType, name, extras);
+        document.getElementById('newEntityModal').classList.remove('open');
+        selectedId = entity.id;
+        browseSearch = '';
+        document.getElementById('browseSearch').value = '';
+        renderBrowseList();
+        renderBrowseDetail();
+        toast(`Created: ${name}`);
+        // Scroll new item into view
+        setTimeout(() => {
+            const el = document.querySelector(`.am-browse-item[data-id="${entity.id}"]`);
+            if (el) el.scrollIntoView({ block: 'nearest' });
+        }, 50);
+    } catch (e) { toast('Create failed: ' + e.message, 'err'); }
+});
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DISCOVER MODE
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* ── Entity type toggle ────────────────────────────────────── */
+document.querySelectorAll('.am-ent-btn[data-disc-type]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        discEntityType = btn.dataset.discType;
+        discSel       = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
+        discAutoSel   = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
+        discColSearch = { merkur: '', maxbet: '', soccerbet: '', cloudbet: '' };
+        discAssignSelId = null;
+        // Clear cache when switching entity type
+        _discAliasCache = null;
+        _discCanonicalCache = null;
+        BK_KEYS.forEach(bk => {
+            const inp = document.getElementById(`discSearch_${bk}`);
+            if (inp) inp.value = '';
+        });
+        document.querySelectorAll('.am-ent-btn[data-disc-type]').forEach(b => b.classList.toggle('active', b.dataset.discType === discEntityType));
+        if (discLoaded) renderDiscoverColumns();
+        renderDiscoverAssign();
+    });
+});
+
+document.getElementById('chkDiscUnmapped').addEventListener('change', e => {
+    discUnmappedOnly = e.target.checked;
+    if (discLoaded) renderDiscoverColumns();
+});
+
+/* ── Per-column search inputs ──────────────────────────────── */
+BK_KEYS.forEach(bk => {
+    document.getElementById(`discSearch_${bk}`).addEventListener('input', e => {
+        discColSearch[bk] = e.target.value.toLowerCase();
+        if (discLoaded) renderDiscoverColumns();
+    });
+});
+
+/* ── Load live data ────────────────────────────────────────── */
+document.getElementById('btnDiscLoad').addEventListener('click', loadDiscoverData);
+
+async function loadDiscoverData() {
+    const btn = document.getElementById('btnDiscLoad');
+    btn.disabled = true; btn.textContent = '⟳ Loading…';
+    try {
+        const responses = await Promise.all([
             fetch(APIS.merkur),
             fetch(APIS.maxbet),
             fetch(APIS.soccerbet),
             fetch(getCloudbetUrl(), { headers: { 'X-API-Key': CLOUDBET_KEY } }),
         ]);
-        const [dMrk, dMbx, dSbt, dClb] = await Promise.all([rMrk.json(), rMbx.json(), rSbt.json(), rClb.json()]);
+        const jsons = await Promise.all(responses.map(r => r.json()));
 
-        const mrkMatches = (dMrk.esMatches || []).filter(m => m.sport === 'S');
-        const mbxMatches = (dMbx.esMatches || []).filter(m => m.sport === 'S' && !isMaxbetBonus(m));
-        const sbtMatches = (dSbt.esMatches || []).filter(m => m.sport === 'S' && !isSbtOutright(m));
-        const clbMatches = parseCloudbetRaw(dClb);
-
-        const mrkLeagues = [...new Set(mrkMatches.map(m => m.leagueName))].sort();
-        const mbxLeagues = [...new Set(mbxMatches.map(m => m.leagueName))].sort();
-        const sbtLeagues = [...new Set(sbtMatches.map(m => m.leagueName))].sort();
-        const clbLeagues = [...new Set(clbMatches.map(m => m.leagueName))].sort();
-
-        const teamNames = ms => [...new Set(ms.flatMap(m => [m.home, m.away]))].sort();
-        const mrkTeams = teamNames(mrkMatches);
-        const mbxTeams = teamNames(mbxMatches);
-        const sbtTeams = teamNames(sbtMatches);
-        const clbTeams = teamNames(clbMatches);
-
-        populateDatalist('dlMrkLeagues', mrkLeagues);
-        populateDatalist('dlMaxLeagues', mbxLeagues);
-        populateDatalist('dlSbtLeagues', sbtLeagues);
-        populateDatalist('dlClbLeagues', clbLeagues);
-        populateDatalist('dlMrkTeams', mrkTeams);
-        populateDatalist('dlMaxTeams', mbxTeams);
-        populateDatalist('dlSbtTeams', sbtTeams);
-        populateDatalist('dlClbTeams', clbTeams);
-    } catch (e) {
-        _nameCacheLoaded = false; // allow retry on next page visit
-        console.warn('[aliases] Name cache load failed:', e.message);
-    }
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   PARALLEL MAP TAB
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-
-async function loadPmData() {
-    const btn = document.getElementById('btnPmLoad');
-    btn.disabled = true; btn.textContent = '…';
-    try {
-        const keys = ['mrk', 'max', 'sbt', 'clb'];
-        const results = await Promise.all(keys.map(k => BK_META[k].api().then(r => r.json())));
-        keys.forEach((k, i) => {
-            const matches = parseForBookie(k, results[i]);
-            const byLeague = {};
-            const byTeam   = {};
-            for (const m of matches) {
-                if (!byLeague[m.leagueName]) byLeague[m.leagueName] = [];
-                byLeague[m.leagueName].push({ home: m.home, away: m.away });
-                for (const t of [m.home, m.away]) {
-                    if (!byTeam[t]) byTeam[t] = new Set();
-                    byTeam[t].add(m.leagueName);
-                }
+        BK_KEYS.forEach((bk, i) => {
+            const matches = parseForBookie(bk, jsons[i]);
+            if (discEntityType === 'leagues') {
+                const byLeague = new Map();
+                matches.forEach(m => {
+                    if (!byLeague.has(m.leagueName)) byLeague.set(m.leagueName, []);
+                    byLeague.get(m.leagueName).push(`${m.home} vs ${m.away}`);
+                });
+                discData[bk] = [...byLeague.entries()].map(([name, games]) => ({ 
+                    name, 
+                    info: `${games.length} matches`,
+                    matches: games
+                })).sort((a, b) => a.name.localeCompare(b.name));
+            } else {
+                const byTeam = new Map();
+                matches.forEach(m => {
+                    [m.home, m.away].forEach(t => {
+                        if (!byTeam.has(t)) byTeam.set(t, []);
+                        byTeam.get(t).push({ league: m.leagueName, opponent: t === m.home ? m.away : m.home });
+                    });
+                });
+                discData[bk] = [...byTeam.entries()].map(([name, teamMatches]) => ({ 
+                    name, 
+                    info: teamMatches.slice(0, 2).map(m => m.league).join(' · '),
+                    matches: teamMatches.map(m => `${m.league}: vs ${m.opponent}`)
+                })).sort((a, b) => a.name.localeCompare(b.name));
             }
-            pmMatches[k]     = byLeague;
-            pmLeagues[k]     = Object.keys(byLeague).sort((a, b) => a.localeCompare(b));
-            pmTeamLeagues[k] = {};
-            for (const [team, leagues] of Object.entries(byTeam))
-                pmTeamLeagues[k][team] = [...leagues].sort();
-            pmTeams[k] = Object.keys(byTeam).sort((a, b) => a.localeCompare(b));
         });
-        pmLoaded = true;
-        pmBulkSugs = computePmBulkSuggestions();
-        renderPmLeft();
-        renderPmDetail();
-        renderPmBulk();
-        document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
-        toast(`Loaded: ${pmLeagues.mrk.length} Merkur · ${pmLeagues.max.length} MaxBet · ${pmLeagues.sbt.length} SoccerBet · ${pmLeagues.clb.length} Cloudbet leagues`);
+
+        discLoaded    = true;
+        discSel       = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
+        discAutoSel   = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
+        discColSearch = { merkur: '', maxbet: '', soccerbet: '', cloudbet: '' };
+        discAssignSelId = null;
+
+        // Build cached mappings for fast lookup
+        _discAliasCache = buildDiscAliasCache();
+        _discCanonicalCache = buildDiscCanonicalCache();
+
+        // Clear search inputs and populate datalists
+        BK_KEYS.forEach(bk => {
+            const inp = document.getElementById(`discSearch_${bk}`);
+            if (inp) inp.value = '';
+            const dl = document.getElementById(`dlDisc_${bk}`);
+            if (dl) dl.innerHTML = (discData[bk] || []).map(item => `<option value="${esc(item.name)}"></option>`).join('');
+        });
+        renderDiscoverColumns();
+        renderDiscoverAssign();
+        toast(`Loaded: ${discData.merkur.length} MRK · ${discData.maxbet.length} MAX · ${discData.soccerbet.length} SBT · ${discData.cloudbet.length} CLB items`);
     } catch (e) {
         toast('Load failed: ' + e.message, 'err');
     } finally {
-        btn.disabled = false; btn.textContent = '⟳ Load Data';
+        btn.disabled = false; btn.textContent = '⟳ Load Live Data';
     }
 }
 
-// Returns 'none' | 'partial' | 'full'
-// When data is loaded, only counts sources that are active (have leagues).
-// When data is not loaded, falls back to raw alias count vs. all 3 pairs.
-function getPmMappedState(mrkName) {
-    const hasMax = getLeagueAliases().some(a => a.merkur === mrkName);
-    const hasSbt = getSoccerbetLeagueAliases().some(a => a.merkur === mrkName);
-    const hasClb = getCloudbetLeagueAliases().some(a => a.merkur === mrkName);
-    if (pmLoaded) {
-        const srcMax = pmLeagues.max.length > 0;
-        const srcSbt = pmLeagues.sbt.length > 0;
-        const srcClb = pmLeagues.clb.length > 0;
-        const total  = (srcMax ? 1 : 0) + (srcSbt ? 1 : 0) + (srcClb ? 1 : 0);
-        const mapped = (srcMax && hasMax ? 1 : 0) + (srcSbt && hasSbt ? 1 : 0) + (srcClb && hasClb ? 1 : 0);
-        if (total === 0 || mapped === 0) return 'none';
-        return mapped === total ? 'full' : 'partial';
-    }
-    const count = (hasMax ? 1 : 0) + (hasSbt ? 1 : 0) + (hasClb ? 1 : 0);
-    if (count === 0) return 'none';
-    return count === 3 ? 'full' : 'partial';
+/* ── Cached mappings for discover mode (avoid repeated API calls) ── */
+function buildDiscAliasCache() {
+    const aliases = discEntityType === 'teams' ? getBookieTeamAliases() : getBookieLeagueAliases();
+    const map = new Map();
+    aliases.forEach(a => map.set(`${a.bookie_key}:${a.raw_name}`, a));
+    return map;
 }
 
-function getBestPmMatch(mrkName, targetLeagues) {
-    let best = null;
-    for (const name of targetLeagues) {
-        const score = nameSim(mrkName, name);
-        if (score >= 0.25 && (!best || score > best.score))
-            best = { name, score };
-    }
-    return best;
+function buildDiscCanonicalCache() {
+    const entities = discEntityType === 'teams' ? getCanonicalTeams() : getCanonicalLeagues();
+    const map = new Map();
+    entities.forEach(e => map.set(e.id, e.name));
+    return map;
 }
 
-function computePmBulkSuggestions() {
-    const isTeams = pmMode === 'teams';
-    const data = isTeams ? pmTeams : pmLeagues;
-    const mappedMrk = isTeams
-        ? new Set([...getTeamAliases().map(a => a.merkur), ...getSoccerbetTeamAliases().map(a => a.merkur), ...getCloudbetTeamAliases().map(a => a.merkur)])
-        : new Set([...getLeagueAliases().map(a => a.merkur), ...getSoccerbetLeagueAliases().map(a => a.merkur), ...getCloudbetLeagueAliases().map(a => a.merkur)]);
-    const list = data.mrk.filter(n => !mappedMrk.has(n));
-    const results = [];
-    for (const mrk of list.slice(0, 200)) {
-        const maxM = getBestPmMatch(mrk, data.max);
-        const sbtM = getBestPmMatch(mrk, data.sbt);
-        const clbM = getBestPmMatch(mrk, data.clb);
-        if (maxM || sbtM || clbM) {
-            results.push({
-                mrk,
-                max: maxM ? maxM.name : null,
-                sbt: sbtM ? sbtM.name : null,
-                clb: clbM ? clbM.name : null,
-                scores: { max: maxM ? maxM.score : 0, sbt: sbtM ? sbtM.score : 0, clb: clbM ? clbM.score : 0 },
-            });
+/* ── Render discover columns ───────────────────────────────── */
+function hasCanonicalAlias(bk, rawName) {
+    if (!_discAliasCache) _discAliasCache = buildDiscAliasCache();
+    return _discAliasCache.has(`${bk}:${rawName}`);
+}
+
+/* For each other bookie column that has no manual selection, pick the best
+   name match and store it in discAutoSel. Threshold 0.45 catches things like
+   "Arsenal" vs "Arsenal FC" (0.75) while filtering random false positives. */
+function autoSelectCrossColumn(sourceBk, sourceName) {
+    BK_KEYS.forEach(bk => {
+        if (bk === sourceBk) return;
+        if (discSel[bk]) return; // don't overwrite a manual selection
+        const items = discData[bk] || [];
+        if (!items.length) { discAutoSel[bk] = null; return; }
+        const best = items
+            .map(item => ({ name: item.name, score: nameSim(sourceName, item.name) }))
+            .filter(item => item.score >= 0.45)
+            .sort((a, b) => b.score - a.score)[0];
+        discAutoSel[bk] = best?.name ?? null;
+    });
+}
+
+function getCanonicalForAlias(bk, rawName) {
+    if (!_discAliasCache) _discAliasCache = buildDiscAliasCache();
+    if (!_discCanonicalCache) _discCanonicalCache = buildDiscCanonicalCache();
+    const alias = _discAliasCache.get(`${bk}:${rawName}`);
+    if (!alias) return null;
+    return _discCanonicalCache.get(alias.canonical_id) || null;
+}
+
+function renderDiscoverColumns() {
+    BK_KEYS.forEach(bk => {
+        // Keep datalist in sync with current entity type filter
+        const dl = document.getElementById(`dlDisc_${bk}`);
+        if (dl && discLoaded) {
+            const q   = discColSearch[bk];
+            const src = discData[bk] || [];
+            const names = q ? src.filter(i => i.name.toLowerCase().includes(q)) : src;
+            dl.innerHTML = names.map(i => `<option value="${esc(i.name)}"></option>`).join('');
         }
-    }
-    return results.sort((a, b) => {
-        const aAvg = (a.scores.max + a.scores.sbt + a.scores.clb) / 3;
-        const bAvg = (b.scores.max + b.scores.sbt + b.scores.clb) / 3;
-        return bAvg - aAvg;
-    }).slice(0, 30);
-}
 
-function renderPmLeft() {
-    const q = pmMrkFilter.toLowerCase();
-    const isTeams = pmMode === 'teams';
-    const stateGetter = isTeams ? getPmTeamMappedState : getPmMappedState;
-    let list = isTeams ? pmTeams.mrk : pmLeagues.mrk;
-    if (pmUnmappedOnly) list = list.filter(n => stateGetter(n) !== 'full');
-    if (q) list = list.filter(n => n.toLowerCase().includes(q));
-    document.getElementById('pmMrkCount').textContent = list.length;
-    document.getElementById('pmMrkList').innerHTML = list.length
-        ? list.map(n => {
-            const state = stateGetter(n);
-            const badge = state === 'full'
-                ? '<div class="am-pm-mapped-badge am-pm-badge-full">mapped</div>'
-                : state === 'partial'
-                    ? '<div class="am-pm-mapped-badge am-pm-badge-partial">partial</div>'
-                    : '';
-            return `
-            <div class="am-pick-item${pmSelMrk === n ? ' selected' : ''}" data-name="${esc(n)}" data-side="pm-mrk" data-src="mrk" data-league="${esc(n)}">
-              <div class="am-pick-name">${esc(n)}</div>
-              ${badge}
+        const items    = discData[bk] || [];
+        const q        = discColSearch[bk];
+        const filtered = items.filter(item => {
+            if (q && !item.name.toLowerCase().includes(q)) return false;
+            if (discUnmappedOnly && hasCanonicalAlias(bk, item.name)) return false;
+            return true;
+        });
+
+        document.getElementById(`discCount_${bk}`).textContent = filtered.length;
+        const list = document.getElementById(`discList_${bk}`);
+
+        if (!filtered.length) {
+            list.innerHTML = `<div class="am-picker-empty">${discLoaded ? (discUnmappedOnly ? 'All mapped ✓' : 'No items') : 'Click "Load Live Data" to start'}</div>`;
+            return;
+        }
+
+        list.innerHTML = filtered.map(item => {
+            const mapped      = hasCanonicalAlias(bk, item.name);
+            const canonName   = mapped ? getCanonicalForAlias(bk, item.name) : null;
+            const isManual    = discSel[bk] === item.name;
+            const isAuto      = !isManual && discAutoSel[bk] === item.name;
+            const cls         = isManual ? ' selected' : isAuto ? ' am-disc-item-auto' : '';
+            const infoHtml    = mapped
+                ? `<span class="am-disc-mapped-label">↳ ${esc(canonName || '?')}</span>`
+                : isAuto
+                    ? `<span class="am-disc-auto-label">≈ auto-suggested</span>`
+                    : esc(item.info);
+            const tooltip     = item.matches ? item.matches.slice(0, 10).join('\n') + (item.matches.length > 10 ? `\n... and ${item.matches.length - 10} more` : '') : '';
+            return `<div class="am-disc-item${cls}${mapped ? ' am-disc-item-mapped' : ''}"
+                        data-bk="${bk}" data-name="${esc(item.name)}" title="${esc(tooltip)}">
+                <div class="am-disc-item-name">${esc(item.name)}</div>
+                <div class="am-disc-item-info">${infoHtml}</div>
             </div>`;
-        }).join('')
-        : `<div class="am-picker-empty">${pmLoaded ? `No ${isTeams ? 'teams' : 'leagues'} found` : 'Click "Load Data" to start'}</div>`;
-}
-
-function renderPmDetail() {
-    const container = document.getElementById('pmDetail');
-    if (!pmSelMrk) {
-        container.innerHTML = '<div class="am-pm-detail-empty">Select a league from the left</div>';
-        return;
-    }
-    const canonName = pmEditName !== null ? pmEditName : pmSelMrk;
-    const isTeams = pmMode === 'teams';
-    const targetData = isTeams ? pmTeams : pmLeagues;
-    const slots = isTeams ? [
-        { key: 'max', label: 'MaxBet',    dotCls: 'am-bk-b',  nameKey: 'maxbet',    aliasGetter: getTeamAliases },
-        { key: 'sbt', label: 'SoccerBet', dotCls: 'am-bk-s',  nameKey: 'soccerbet', aliasGetter: getSoccerbetTeamAliases },
-        { key: 'clb', label: 'Cloudbet',  dotCls: 'am-bk-cl', nameKey: 'cloudbet',  aliasGetter: getCloudbetTeamAliases },
-    ] : [
-        { key: 'max', label: 'MaxBet',    dotCls: 'am-bk-b',  nameKey: 'maxbet',    aliasGetter: getLeagueAliases },
-        { key: 'sbt', label: 'SoccerBet', dotCls: 'am-bk-s',  nameKey: 'soccerbet', aliasGetter: getSoccerbetLeagueAliases },
-        { key: 'clb', label: 'Cloudbet',  dotCls: 'am-bk-cl', nameKey: 'cloudbet',  aliasGetter: getCloudbetLeagueAliases },
-    ];
-
-    const resolved = {};
-    for (const { key, nameKey, aliasGetter } of slots) {
-        const existing = aliasGetter().find(a => a.merkur === pmSelMrk);
-        if (existing) {
-            resolved[key] = { name: existing[nameKey], score: null, existing: true };
-        } else if (pmOverrides[key] !== null && pmOverrides[key] !== undefined) {
-            resolved[key] = pmOverrides[key] ? { name: pmOverrides[key], score: null, existing: false } : null;
-        } else {
-            const match = getBestPmMatch(pmSelMrk, targetData[key]);
-            resolved[key] = match ? { name: match.name, score: match.score, existing: false } : null;
-        }
-    }
-
-    const slotHtml = slots.map(({ key, label, dotCls }) => {
-        const r = resolved[key];
-        if (pmActiveSlot === key) {
-            const f = pmSlotFilter.toLowerCase();
-            const options = targetData[key].filter(n => !f || n.toLowerCase().includes(f));
-            return `
-              <div class="am-pm-slot am-pm-slot-open" data-slot="${key}">
-                <div class="am-pm-slot-head">
-                  <span class="am-bk-dot ${dotCls}"></span>
-                  <span>${label}</span>
-                  <button class="am-btn am-btn-ghost am-pm-slot-close" data-slot="${key}">✕ close</button>
-                </div>
-                <input class="am-input am-pm-slot-search" id="pmSlotInput_${key}"
-                       value="${esc(pmSlotFilter)}" placeholder="Search ${label}…" autocomplete="off" />
-                <div class="am-pm-slot-dropdown">
-                  <div class="am-pm-slot-none" data-slot="${key}" data-val="">— No mapping —</div>
-                  ${options.slice(0, 60).map(n => `
-                    <div class="am-pm-slot-opt" data-slot="${key}" data-val="${esc(n)}">${esc(n)}</div>`).join('')}
-                </div>
-              </div>`;
-        }
-        const isExcluded = pmOverrides[key] === false;
-        if (isExcluded) {
-            return `
-              <div class="am-pm-slot am-pm-slot-excluded" data-slot="${key}">
-                <div class="am-pm-slot-head">
-                  <span class="am-bk-dot ${dotCls}" style="opacity:0.35"></span>
-                  <span>${label}</span>
-                  <span class="am-pm-excluded-badge">excluded</span>
-                </div>
-                <div class="am-pm-slot-val">
-                  <span class="am-pm-slot-empty">Not offered — no pairs will be created</span>
-                </div>
-                <button class="am-btn am-btn-ghost am-pm-restore-btn" data-slot="${key}">↩ restore</button>
-              </div>`;
-        }
-        return `
-          <div class="am-pm-slot" data-slot="${key}">
-            <div class="am-pm-slot-head">
-              <span class="am-bk-dot ${dotCls}"></span>
-              <span>${label}</span>
-              ${r && r.existing ? '<span class="am-pm-slot-saved">saved</span>' : ''}
-              <button class="am-btn am-btn-ghost am-pm-exclude-btn" data-slot="${key}" title="Exclude — bookmaker doesn't offer this league">✕ exclude</button>
-            </div>
-            <div class="am-pm-slot-val">
-              ${r
-                ? `<span class="am-pm-slot-name" data-src="${key}" data-league="${esc(r.name)}">${esc(r.name)}</span>
-                   ${r.score !== null ? `<span class="am-sug-score">${Math.round(r.score * 100)}%</span>` : ''}`
-                : `<span class="am-pm-slot-empty">No match found</span>`}
-            </div>
-            <button class="am-btn am-btn-ghost am-pm-change-btn" data-slot="${key}">✎ change</button>
-          </div>`;
-    }).join('');
-
-    const hasSomething = Object.values(resolved).some(r => r && !r.existing);
-    container.innerHTML = `
-      <div class="am-pm-detail-inner">
-        <div class="am-pm-canon">
-          <label class="am-pm-canon-label">Canonical name (Merkur anchor)</label>
-          <input class="am-input am-pm-canon-input" id="pmCanonInput" value="${esc(canonName)}" />
-        </div>
-        <div class="am-pm-slots">${slotHtml}</div>
-        <div class="am-pm-actions">
-          <button class="am-btn am-btn-primary" id="btnPmSave"${hasSomething ? '' : ' disabled'}>Save Mappings</button>
-          <button class="am-btn am-btn-ghost" id="btnPmClear">Clear</button>
-        </div>
-      </div>`;
-
-    // Re-attach transient events for newly rendered elements
-    const canonInput = document.getElementById('pmCanonInput');
-    if (canonInput) canonInput.addEventListener('input', e => { pmEditName = e.target.value; });
-
-    const saveBtn = document.getElementById('btnPmSave');
-    if (saveBtn) saveBtn.addEventListener('click', onPmSave);
-
-    const clearBtn = document.getElementById('btnPmClear');
-    if (clearBtn) clearBtn.addEventListener('click', onPmClear);
-
-    // Exclude / restore buttons
-    container.querySelectorAll('.am-pm-exclude-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            pmOverrides[btn.dataset.slot] = false;
-            if (pmActiveSlot === btn.dataset.slot) { pmActiveSlot = null; pmSlotFilter = ''; }
-            renderPmDetail();
-        });
+        }).join('');
     });
-    container.querySelectorAll('.am-pm-restore-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            pmOverrides[btn.dataset.slot] = null;
-            renderPmDetail();
-        });
-    });
+}
 
-    // Slot change buttons
-    container.querySelectorAll('.am-pm-change-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            pmActiveSlot = btn.dataset.slot;
-            pmSlotFilter = '';
-            renderPmDetail();
-            const input = document.getElementById(`pmSlotInput_${pmActiveSlot}`);
-            if (input) input.focus();
-        });
-    });
+/* ── Column click delegation ───────────────────────────────── */
+document.getElementById('discColumns').addEventListener('click', e => {
+    const item = e.target.closest('.am-disc-item');
+    if (!item) return;
+    const { bk, name } = item.dataset;
 
-    // Slot close buttons
-    container.querySelectorAll('.am-pm-slot-close').forEach(btn => {
-        btn.addEventListener('click', () => {
-            pmActiveSlot = null;
-            pmSlotFilter = '';
-            renderPmDetail();
-        });
-    });
-
-    // Open slot: search input
-    if (pmActiveSlot) {
-        const inp = document.getElementById(`pmSlotInput_${pmActiveSlot}`);
-        if (inp) {
-            inp.addEventListener('input', e => {
-                pmSlotFilter = e.target.value;
-                renderPmDetail();
-                // Restore focus after re-render
-                const newInp = document.getElementById(`pmSlotInput_${pmActiveSlot}`);
-                if (newInp) { newInp.focus(); newInp.setSelectionRange(newInp.value.length, newInp.value.length); }
-            });
+    if (discSel[bk] === name) {
+        // Deselect manual → clear manual + all auto-suggestions
+        discSel[bk] = null;
+        discAutoSel[bk] = null;
+        if (!BK_KEYS.some(k => discSel[k])) {
+            BK_KEYS.forEach(k => { discAutoSel[k] = null; });
         }
-        // Dropdown options
-        container.querySelectorAll('.am-pm-slot-opt, .am-pm-slot-none').forEach(opt => {
-            opt.addEventListener('click', () => {
-                pmOverrides[opt.dataset.slot] = opt.dataset.val || '';
-                pmActiveSlot = null;
-                pmSlotFilter = '';
-                renderPmDetail();
-            });
-        });
-    }
-}
-
-function renderPmBulk() {
-    const container = document.getElementById('pmBulkList');
-    const btn = document.getElementById('btnPmBulkSave');
-    if (!pmBulkSugs.length) {
-        container.innerHTML = `<div class="am-sug-empty">No suggestions — all ${pmMode} may already be mapped</div>`;
-        if (btn) btn.disabled = true;
-        return;
-    }
-    if (btn) btn.disabled = false;
-    container.innerHTML = pmBulkSugs.map((s, i) => `
-      <div class="am-pm-bulk-row" data-idx="${i}">
-        <div class="am-pm-bulk-mrk">${esc(s.mrk)}</div>
-        <div class="am-pm-bulk-targets">
-          ${s.max ? `<span class="am-pm-bulk-chip am-pm-chip-max" title="MaxBet">${esc(s.max)} <em>${Math.round(s.scores.max * 100)}%</em></span>` : ''}
-          ${s.sbt ? `<span class="am-pm-bulk-chip am-pm-chip-sbt" title="SoccerBet">${esc(s.sbt)} <em>${Math.round(s.scores.sbt * 100)}%</em></span>` : ''}
-          ${s.clb ? `<span class="am-pm-bulk-chip am-pm-chip-clb" title="Cloudbet">${esc(s.clb)} <em>${Math.round(s.scores.clb * 100)}%</em></span>` : ''}
-        </div>
-        <button class="am-btn am-btn-ghost am-pm-bulk-skip" data-idx="${i}" title="Skip">✗</button>
-      </div>`).join('');
-}
-
-async function saveParallelMapping(mrkName, max, sbt, clb) {
-    const saves = [];
-    if (max) saves.push(addLeagueAlias(mrkName, max));
-    if (sbt) saves.push(addSoccerbetLeagueAlias(mrkName, sbt));
-    if (clb) saves.push(addCloudbetLeagueAlias(mrkName, clb));
-    if (max && sbt) saves.push(addMaxbetSbtLeagueAlias(max, sbt));
-    if (max && clb) saves.push(addMaxbetClbLeagueAlias(max, clb));
-    if (sbt && clb) saves.push(addSbtClbLeagueAlias(sbt, clb));
-    await Promise.all(saves);
-}
-
-async function saveParallelTeamMapping(mrkName, max, sbt, clb) {
-    const saves = [];
-    if (max) saves.push(addTeamAlias(mrkName, max));
-    if (sbt) saves.push(addSoccerbetTeamAlias(mrkName, sbt));
-    if (clb) saves.push(addCloudbetTeamAlias(mrkName, clb));
-    if (max && sbt) saves.push(addMaxbetSbtTeamAlias(max, sbt));
-    if (max && clb) saves.push(addMaxbetClbTeamAlias(max, clb));
-    if (sbt && clb) saves.push(addSbtClbTeamAlias(sbt, clb));
-    await Promise.all(saves);
-}
-
-function getPmTeamMappedState(mrkName) {
-    const hasMax = getTeamAliases().some(a => a.merkur === mrkName);
-    const hasSbt = getSoccerbetTeamAliases().some(a => a.merkur === mrkName);
-    const hasClb = getCloudbetTeamAliases().some(a => a.merkur === mrkName);
-    if (pmLoaded) {
-        const srcMax = pmTeams.max.length > 0;
-        const srcSbt = pmTeams.sbt.length > 0;
-        const srcClb = pmTeams.clb.length > 0;
-        const total  = (srcMax ? 1 : 0) + (srcSbt ? 1 : 0) + (srcClb ? 1 : 0);
-        const mapped = (srcMax && hasMax ? 1 : 0) + (srcSbt && hasSbt ? 1 : 0) + (srcClb && hasClb ? 1 : 0);
-        if (total === 0 || mapped === 0) return 'none';
-        return mapped === total ? 'full' : 'partial';
-    }
-    const count = (hasMax ? 1 : 0) + (hasSbt ? 1 : 0) + (hasClb ? 1 : 0);
-    if (count === 0) return 'none';
-    return count === 3 ? 'full' : 'partial';
-}
-
-async function onPmSave() {
-    if (!pmSelMrk || pmSaving) return;
-    pmSaving = true;
-    const isTeams = pmMode === 'teams';
-    const mrkName = (pmEditName !== null && pmEditName.trim()) ? pmEditName.trim() : pmSelMrk;
-    const slots = isTeams ? [
-        { key: 'max', nameKey: 'maxbet',    aliasGetter: getTeamAliases },
-        { key: 'sbt', nameKey: 'soccerbet', aliasGetter: getSoccerbetTeamAliases },
-        { key: 'clb', nameKey: 'cloudbet',  aliasGetter: getCloudbetTeamAliases },
-    ] : [
-        { key: 'max', nameKey: 'maxbet',    aliasGetter: getLeagueAliases },
-        { key: 'sbt', nameKey: 'soccerbet', aliasGetter: getSoccerbetLeagueAliases },
-        { key: 'clb', nameKey: 'cloudbet',  aliasGetter: getCloudbetLeagueAliases },
-    ];
-    const targetData = isTeams ? pmTeams : pmLeagues;
-    const resolved = {};
-    for (const { key, aliasGetter } of slots) {
-        const existing = aliasGetter().find(a => a.merkur === pmSelMrk);
-        if (existing) {
-            resolved[key] = null;
-        } else if (pmOverrides[key] !== null && pmOverrides[key] !== undefined) {
-            resolved[key] = pmOverrides[key] || null;
-        } else {
-            const match = getBestPmMatch(pmSelMrk, targetData[key]);
-            resolved[key] = match ? match.name : null;
-        }
-    }
-    try {
-        if (isTeams) {
-            await saveParallelTeamMapping(mrkName, resolved.max, resolved.sbt, resolved.clb);
-            renderTeamList(); renderSbtTeamList(); renderClbTeamList();
-            renderMbxSbtTeamList(); renderMbxClbTeamList(); renderSbtClbTeamList();
-        } else {
-            await saveParallelMapping(mrkName, resolved.max, resolved.sbt, resolved.clb);
-            renderLeagueList(); renderSbtLeagueList(); renderClbLeagueList();
-            renderMbxSbtLeagueList(); renderMbxClbLeagueList(); renderSbtClbLeagueList();
-        }
-        // Remove saved league from bulk suggestions
-        pmBulkSugs = pmBulkSugs.filter(s => s.mrk !== pmSelMrk);
-        renderPmBulk();
-        document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
-        onPmClear();
-        renderPmLeft();
-        toast('Mappings saved');
-    } catch (e) {
-        toast('Save failed: ' + e.message, 'err');
-    } finally {
-        pmSaving = false;
-    }
-}
-
-function onPmClear() {
-    pmSelMrk = null;
-    pmEditName = null;
-    pmOverrides = { max: null, sbt: null, clb: null };
-    pmActiveSlot = null;
-    pmSlotFilter = '';
-    renderPmDetail();
-    renderPmLeft();
-}
-
-/* ── Parallel Map event handlers ───────────────────────────── */
-
-document.getElementById('btnPmLoad').addEventListener('click', loadPmData);
-
-document.getElementById('pmMrkSearch').addEventListener('input', e => {
-    pmMrkFilter = e.target.value;
-    renderPmLeft();
-});
-
-document.getElementById('chkPmTeamMode').addEventListener('change', e => {
-    pmMode = e.target.checked ? 'teams' : 'leagues';
-    pmSelMrk = null;
-    pmEditName = null;
-    pmOverrides = { max: null, sbt: null, clb: null };
-    pmActiveSlot = null;
-    pmSlotFilter = '';
-    document.getElementById('pmMrkSearch').placeholder = pmMode === 'teams' ? 'Search Merkur teams…' : 'Search Merkur leagues…';
-    pmBulkSugs = computePmBulkSuggestions();
-    renderPmLeft();
-    renderPmDetail();
-    renderPmBulk();
-    document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
-});
-
-document.getElementById('chkPmUnmappedOnly').addEventListener('change', e => {
-    pmUnmappedOnly = e.target.checked;
-    renderPmLeft();
-});
-
-document.getElementById('pmMrkList').addEventListener('click', e => {
-    const item = e.target.closest('.am-pick-item');
-    if (!item || item.dataset.side !== 'pm-mrk') return;
-    pmSelMrk = pmSelMrk === item.dataset.name ? null : item.dataset.name;
-    pmEditName = null;
-    pmOverrides = { max: null, sbt: null, clb: null };
-    pmActiveSlot = null;
-    pmSlotFilter = '';
-    renderPmLeft();
-    renderPmDetail();
-});
-
-/* ── Parallel Map tooltip ───────────────────────────────────── */
-
-function showPmTooltip(anchorEl, srcKey, itemName) {
-    const tip = document.getElementById('pmTooltip');
-    const SHOW = 7;
-    let tipHtml;
-    if (pmMode === 'teams') {
-        const leagues = pmTeamLeagues[srcKey] && pmTeamLeagues[srcKey][itemName];
-        if (!leagues || !leagues.length) return;
-        const more = leagues.length - SHOW;
-        tipHtml = `
-        <div class="am-pm-tip-head">
-            <span class="am-bk-dot ${BK_META[srcKey].dotCls}"></span>
-            <span>${BK_META[srcKey].label}</span>
-            <span class="am-pm-tip-count">${leagues.length} league${leagues.length !== 1 ? 's' : ''}</span>
-        </div>
-        <ul class="am-pm-tip-list">
-            ${leagues.slice(0, SHOW).map(l => `<li><span class="am-pm-tip-home">${esc(l)}</span></li>`).join('')}
-            ${more > 0 ? `<li class="am-pm-tip-more">…and ${more} more</li>` : ''}
-        </ul>`;
+    } else if (discAutoSel[bk] === name) {
+        // Confirm auto-suggestion → promote to manual (no new auto-suggests needed)
+        discAutoSel[bk] = null;
+        discSel[bk] = name;
     } else {
-        const matches = pmMatches[srcKey] && pmMatches[srcKey][itemName];
-        if (!matches || !matches.length) return;
-        const more = matches.length - SHOW;
-        tipHtml = `
-        <div class="am-pm-tip-head">
-            <span class="am-bk-dot ${BK_META[srcKey].dotCls}"></span>
-            <span>${BK_META[srcKey].label}</span>
-            <span class="am-pm-tip-count">${matches.length} match${matches.length !== 1 ? 'es' : ''}</span>
-        </div>
-        <ul class="am-pm-tip-list">
-            ${matches.slice(0, SHOW).map(m => `<li><span class="am-pm-tip-home">${esc(m.home)}</span> <span class="am-pm-tip-vs">vs</span> <span class="am-pm-tip-away">${esc(m.away)}</span></li>`).join('')}
-            ${more > 0 ? `<li class="am-pm-tip-more">…and ${more} more</li>` : ''}
-        </ul>`;
+        // New manual selection → auto-suggest remaining columns
+        discSel[bk] = name;
+        discAutoSel[bk] = null;
+        autoSelectCrossColumn(bk, name);
     }
-    tip.innerHTML = tipHtml;
-    // Measure after rendering
-    tip.style.visibility = 'hidden';
-    tip.style.display = 'block';
-    const rect = anchorEl.getBoundingClientRect();
-    const tipW = tip.offsetWidth;
-    const tipH = tip.offsetHeight;
-    const left = rect.right + 8 + tipW > window.innerWidth
-        ? rect.left - tipW - 8
-        : rect.right + 8;
-    tip.style.left = Math.max(8, left) + 'px';
-    tip.style.top  = Math.max(8, Math.min(rect.top, window.innerHeight - tipH - 10)) + 'px';
-    tip.style.visibility = 'visible';
+
+    discAssignSearch = '';
+    discAssignSelId  = null;
+    renderDiscoverColumns();
+    renderDiscoverAssign();
+});
+
+/* ── Render assign panel ───────────────────────────────────── */
+function computeDiscoverSuggestions() {
+    const entities = discEntityType === 'teams' ? getCanonicalTeams() : getCanonicalLeagues();
+    if (!entities.length) return [];
+    // Use all selected names (manual + auto) — score = best match across any of them
+    const selectedNames = BK_KEYS.map(bk => discSel[bk] || discAutoSel[bk]).filter(Boolean);
+    if (!selectedNames.length) return [];
+    return entities
+        .map(e => ({ ...e, score: Math.max(...selectedNames.map(n => nameSim(n, e.name))) }))
+        .filter(e => e.score >= 0.25)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6);
 }
 
-function hidePmTooltip() {
-    const tip = document.getElementById('pmTooltip');
-    tip.style.display = 'none';
-}
-
-// Delegation: left-column list
-document.getElementById('pmMrkList').addEventListener('mouseover', e => {
-    const item = e.target.closest('.am-pick-item[data-src]');
-    if (item) showPmTooltip(item, item.dataset.src, item.dataset.league);
-    else hidePmTooltip();
-});
-document.getElementById('pmMrkList').addEventListener('mouseleave', hidePmTooltip);
-
-// Delegation: detail panel slot names
-document.getElementById('pmDetail').addEventListener('mouseover', e => {
-    const span = e.target.closest('.am-pm-slot-name[data-src]');
-    if (span) showPmTooltip(span, span.dataset.src, span.dataset.league);
-    else hidePmTooltip();
-});
-document.getElementById('pmDetail').addEventListener('mouseleave', hidePmTooltip);
-
-document.getElementById('pmBulkList').addEventListener('click', e => {
-    // Skip button
-    const skip = e.target.closest('.am-pm-bulk-skip');
-    if (skip) {
-        const idx = parseInt(skip.dataset.idx, 10);
-        pmBulkSugs.splice(idx, 1);
-        renderPmBulk();
-        document.getElementById('btnPmBulkSave').disabled = pmBulkSugs.length === 0;
+function renderDiscoverAssign() {
+    const el = document.getElementById('discAssign');
+    // Collect manual + auto selections for display
+    const selected = BK_KEYS
+        .map(bk => ({ bk, name: discSel[bk] || discAutoSel[bk], isAuto: !discSel[bk] && !!discAutoSel[bk] }))
+        .filter(s => s.name);
+    if (!selected.length) {
+        el.innerHTML = `<div class="am-assign-empty">Select names from the columns to map them</div>`;
         return;
     }
-});
 
-document.getElementById('btnPmBulkSave').addEventListener('click', async () => {
-    const btn = document.getElementById('btnPmBulkSave');
-    const pairs = [...pmBulkSugs];
-    if (!pairs.length) return;
-    btn.disabled = true; btn.textContent = '…';
-    let saved = 0, failed = 0;
-    const isTeams = pmMode === 'teams';
-    const saveFn = isTeams ? saveParallelTeamMapping : saveParallelMapping;
-    for (const { mrk, max, sbt, clb } of pairs) {
+    const selectedChips = selected.map(({ bk, name, isAuto }) => `
+        <div class="am-assign-sel-item${isAuto ? ' am-assign-sel-auto' : ''}">
+            <span class="am-bk-pill ${BK_META[bk].pillCls}">${BK_META[bk].shortLabel}</span>
+            <span class="am-assign-sel-name">${esc(name)}${isAuto ? ' <em class="am-sel-auto-badge">auto</em>' : ''}</span>
+            <button class="am-assign-sel-del" data-bk="${bk}" title="Deselect">✕</button>
+        </div>`).join('');
+
+    const suggestions = computeDiscoverSuggestions();
+    const entities    = discEntityType === 'teams' ? getCanonicalTeams() : getCanonicalLeagues();
+    const q = discAssignSearch.toLowerCase();
+    const filtered = q
+        ? entities.filter(e => e.name.toLowerCase().includes(q))
+        : suggestions;
+
+    const canonList = filtered.map(e => `
+        <div class="am-assign-canon-item${discAssignSelId === e.id ? ' selected' : ''}" data-can-id="${e.id}">
+            <div class="am-assign-canon-name">${esc(e.name)}</div>
+            ${e.score !== undefined ? `<div class="am-assign-canon-score">${Math.round(e.score * 100)}%</div>` : ''}
+        </div>`).join('') || `<div class="am-sug-empty">${q ? `No canonicals match "${esc(discAssignSearch)}"` : 'No suggestions'}</div>`;
+
+    const canCreate = discAssignSearch.trim() && !entities.some(e => e.name.toLowerCase() === discAssignSearch.trim().toLowerCase());
+
+    el.innerHTML = `
+        <div class="am-assign-inner">
+            <div class="am-assign-section-title">Selected</div>
+            <div class="am-assign-selected">${selectedChips}</div>
+
+            <div class="am-assign-section-title" style="margin-top:12px;">Assign to canonical</div>
+            <div class="am-assign-search-row">
+                <input class="am-input" id="discAssignSearch" value="${esc(discAssignSearch)}" placeholder="Search or type new name…" autocomplete="off" />
+            </div>
+
+            <div class="am-assign-canon-list">${canonList}</div>
+
+            ${canCreate ? `<button class="am-btn am-btn-ghost am-assign-create-btn">+ Create "${esc(discAssignSearch.trim())}"</button>` : ''}
+
+            <div class="am-assign-actions">
+                <button class="am-btn am-btn-primary" id="btnDiscSave"${discAssignSelId ? '' : ' disabled'}>Save Mapping</button>
+                <button class="am-btn am-btn-ghost" id="btnDiscClear">Clear</button>
+            </div>
+        </div>`;
+
+    // Search input
+    document.getElementById('discAssignSearch').addEventListener('input', e => {
+        discAssignSearch = e.target.value;
+        discAssignSelId  = null;
+        const cursorPos = e.target.selectionStart;
+        renderDiscoverAssign();
+        const input = document.getElementById('discAssignSearch');
+        if (input) {
+            input.focus();
+            input.setSelectionRange(cursorPos, cursorPos);
+        }
+    });
+
+    // Select canonical
+    el.querySelectorAll('.am-assign-canon-item').forEach(item => {
+        item.addEventListener('click', () => {
+            discAssignSelId = parseInt(item.dataset.canId, 10);
+            renderDiscoverAssign();
+        });
+    });
+
+    // Create new canonical
+    el.querySelector('.am-assign-create-btn')?.addEventListener('click', async () => {
+        const name = discAssignSearch.trim();
+        if (!name) return;
         try {
-            await saveFn(mrk, max, sbt, clb);
-            pmBulkSugs = pmBulkSugs.filter(s => s.mrk !== mrk);
+            const entity = await addCanonical(discEntityType, name);
+            discAssignSelId  = entity.id;
+            discAssignSearch = '';
+            renderDiscoverAssign();
+            toast(`Created: ${name}`);
+        } catch (e) { toast('Create failed: ' + e.message, 'err'); }
+    });
+
+    // Save mapping
+    document.getElementById('btnDiscSave')?.addEventListener('click', saveDiscoverMapping);
+
+    // Clear selection
+    document.getElementById('btnDiscClear')?.addEventListener('click', () => {
+        discSel     = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
+        discAutoSel = { merkur: null, maxbet: null, soccerbet: null, cloudbet: null };
+        discAssignSelId  = null;
+        discAssignSearch = '';
+        renderDiscoverColumns();
+        renderDiscoverAssign();
+    });
+
+    // Deselect individual
+    el.querySelectorAll('.am-assign-sel-del').forEach(btn => {
+        btn.addEventListener('click', () => {
+            discSel[btn.dataset.bk]     = null;
+            discAutoSel[btn.dataset.bk] = null;
+            discAssignSelId = null;
+            discAssignSearch = '';
+            renderDiscoverColumns();
+            renderDiscoverAssign();
+        });
+    });
+}
+
+async function saveDiscoverMapping() {
+    if (!discAssignSelId || discSaving) return;
+    discSaving = true;
+    const btn = document.getElementById('btnDiscSave');
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+    const selected = BK_KEYS
+        .map(bk => ({ bk, name: discSel[bk] || discAutoSel[bk] }))
+        .filter(s => s.name);
+    
+    let saved = 0, failed = 0;
+    for (const { bk, name } of selected) {
+        try {
+            await addBookieAlias(discEntityType, bk, name, discAssignSelId);
             saved++;
-        } catch {
+        } catch (e) {
+            console.error('[aliases] Failed to save alias:', bk, name, e.message);
             failed++;
         }
     }
-    if (isTeams) {
-        renderTeamList(); renderSbtTeamList(); renderClbTeamList();
-        renderMbxSbtTeamList(); renderMbxClbTeamList(); renderSbtClbTeamList();
-    } else {
-        renderLeagueList(); renderSbtLeagueList(); renderClbLeagueList();
-        renderMbxSbtLeagueList(); renderMbxClbLeagueList(); renderSbtClbLeagueList();
-    }
-    renderPmLeft();
-    renderPmBulk();
-    btn.textContent = 'Save All';
-    btn.disabled = pmBulkSugs.length === 0;
-    if (failed > 0) toast(`Saved ${saved}, ${failed} failed`, 'warn');
-    else toast(`Bulk saved ${saved} parallel mappings`);
-});
 
-function wireSectionToggles() {
-    document.querySelectorAll('.am-panel-head').forEach(head => {
-        let el = head.nextElementSibling;
-        while (el) {
-            if (el.classList.contains('am-list')) {
-                const list = el;
-                const h2 = head.querySelector('h2');
-                if (h2) {
-                    const btn = document.createElement('button');
-                    btn.className = 'am-section-toggle';
-                    btn.textContent = '▼ Hide';
-                    btn.addEventListener('click', () => {
-                        const collapsed = list.classList.toggle('am-collapsed');
-                        btn.textContent = collapsed ? '▶ Show' : '▼ Hide';
-                    });
-                    h2.appendChild(btn);
-                }
-                break;
-            }
-            if (el.classList.contains('am-panel-head')) break;
-            el = el.nextElementSibling;
-        }
-    });
+    // Remove saved items from selections
+    selected.forEach(({ bk }) => { discSel[bk] = null; discAutoSel[bk] = null; });
+    discAssignSelId  = null;
+    discAssignSearch = '';
+    discSaving       = false;
+
+    // Invalidate cache after saving new mappings
+    _discAliasCache = null;
+    _discCanonicalCache = null;
+
+    // Clear search input field
+    const searchInput = document.getElementById('discAssignSearch');
+    if (searchInput) searchInput.value = '';
+
+    renderDiscoverColumns();
+    renderDiscoverAssign();
+    if (mode === 'browse') renderBrowseList();
+
+    if (failed) toast(`Saved ${saved}, ${failed} failed`, 'warn');
+    else toast(`Saved ${saved} alias${saved !== 1 ? 'es' : ''}`);
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   CLEAR ALL
+   IMPORT / CLEAR ALL
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-document.getElementById('btnClearAll').addEventListener('click', async () => {
-    const total = [
-        getTeamAliases(), getLeagueAliases(),
-        getSoccerbetTeamAliases(), getSoccerbetLeagueAliases(),
-        getCloudbetTeamAliases(), getCloudbetLeagueAliases(),
-        getMaxbetSbtTeamAliases(), getMaxbetSbtLeagueAliases(),
-        getMaxbetClbTeamAliases(), getMaxbetClbLeagueAliases(),
-        getSbtClbTeamAliases(), getSbtClbLeagueAliases(),
-        getLeagueGroups(), getLeagueDisplayNames(),
-    ].reduce((sum, arr) => sum + arr.length, 0);
-
-    if (!confirm(`Delete ALL ${total} aliases from every table? This cannot be undone.`)) return;
-
-    const tables = [
-        'team_aliases', 'league_aliases',
-        'soccerbet_team_aliases', 'soccerbet_league_aliases',
-        'cloudbet_team_aliases', 'cloudbet_league_aliases',
-        'maxbet_soccerbet_team_aliases', 'maxbet_soccerbet_league_aliases',
-        'maxbet_cloudbet_team_aliases', 'maxbet_cloudbet_league_aliases',
-        'soccerbet_cloudbet_team_aliases', 'soccerbet_cloudbet_league_aliases',
-        'league_groups', 'league_display_names',
-    ];
-
+document.getElementById('btnImport').addEventListener('click', () => {
+    document.getElementById('importModal').classList.add('open');
+});
+document.getElementById('btnImportCancel').addEventListener('click', () => {
+    document.getElementById('importModal').classList.remove('open');
+});
+document.getElementById('btnImportConfirm').addEventListener('click', async () => {
     try {
-        // Delete all rows — use .not('id', 'is', null) which works for any Supabase default schema
-        await Promise.all(tables.map(t => supa.from(t).delete().not('id', 'is', null)));
-        // Force a fresh DB load
-        await reloadAliasDB();
-        [renderTeamList, renderLeagueList,
-         renderSbtTeamList, renderSbtLeagueList,
-         renderClbTeamList, renderClbLeagueList,
-         renderMbxSbtTeamList, renderMbxSbtLeagueList,
-         renderMbxClbTeamList, renderMbxClbLeagueList,
-         renderSbtClbTeamList, renderSbtClbLeagueList,
-         renderGroupList, renderDisplayNameList].forEach(fn => fn());
+        const text = document.getElementById('importText').value;
+        await importAliasesFromJSON(text);
+        document.getElementById('importModal').classList.remove('open');
+        renderBrowseList();
+        renderBrowseDetail();
+        toast('Import complete. Data uploaded to Supabase.');
+    } catch (e) {
+        toast('Import failed: ' + e.message, 'err');
+    }
+});
+
+document.getElementById('btnClearAll').addEventListener('click', async () => {
+    const teams   = getCanonicalTeams().length;
+    const leagues = getCanonicalLeagues().length;
+    const aliases = getBookieTeamAliases().length + getBookieLeagueAliases().length;
+    if (!confirm(`Delete ALL ${teams + leagues} canonical entities and ${aliases} aliases? This cannot be undone.`)) return;
+    try {
+        await Promise.all([
+            supa.from('bookie_team_aliases').delete().not('id', 'is', null),
+            supa.from('bookie_league_aliases').delete().not('id', 'is', null),
+        ]);
+        await Promise.all([
+            supa.from('canonical_teams').delete().not('id', 'is', null),
+            supa.from('canonical_leagues').delete().not('id', 'is', null),
+        ]);
+        await reloadCanonicalDB();
+        selectedId = null;
+        renderBrowseList();
+        renderBrowseDetail();
         toast('All aliases cleared', 'warn');
     } catch (e) {
         toast('Clear failed: ' + e.message, 'err');
     }
 });
 
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   NAME CACHE (background datalist population)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+async function ensureNameCache() {
+    if (_nameCacheLoaded) return;
+    _nameCacheLoaded = true;
+    try {
+        const [rMrk, rMax, rSbt, rClb] = await Promise.all([
+            fetch(APIS.merkur),
+            fetch(APIS.maxbet),
+            fetch(APIS.soccerbet),
+            fetch(getCloudbetUrl(), { headers: { 'X-API-Key': CLOUDBET_KEY } }),
+        ]);
+        const [dMrk, dMax, dSbt, dClb] = await Promise.all([rMrk.json(), rMax.json(), rSbt.json(), rClb.json()]);
+
+        const mrkM = (dMrk.esMatches || []).filter(m => m.sport === 'S');
+        const maxM = (dMax.esMatches || []).filter(m => m.sport === 'S' && !isMaxbetBonus(m));
+        const sbtM = (dSbt.esMatches || []).filter(m => m.sport === 'S' && !isSbtOutright(m));
+        const clbM = parseCloudbetRaw(dClb);
+
+        const teams  = ms => [...new Set(ms.flatMap(m => [m.home, m.away]))].sort();
+        const leagues = ms => [...new Set(ms.map(m => m.leagueName))].sort();
+        const fill   = (id, names) => {
+            const dl = document.getElementById(id);
+            if (dl) dl.innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
+        };
+
+        fill('dlMrkTeams',   teams(mrkM));   fill('dlMaxTeams',   teams(maxM));
+        fill('dlSbtTeams',   teams(sbtM));   fill('dlClbTeams',   teams(clbM));
+        fill('dlMrkLeagues', leagues(mrkM)); fill('dlMaxLeagues', leagues(maxM));
+        fill('dlSbtLeagues', leagues(sbtM)); fill('dlClbLeagues', leagues(clbM));
+    } catch (e) {
+        _nameCacheLoaded = false;
+        console.warn('[aliases] Name cache load failed:', e.message);
+    }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   INIT
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 async function init() {
-    wireSectionToggles();
-    await loadAliasDB();
-    renderTeamList();
-    renderSbtTeamList();
-    renderClbTeamList();
-    renderMbxSbtTeamList();
-    renderMbxClbTeamList();
-    renderSbtClbTeamList();
-    renderLeagueList();
-    renderSbtLeagueList();
-    renderClbLeagueList();
-    renderMbxSbtLeagueList();
-    renderMbxClbLeagueList();
-    renderSbtClbLeagueList();
-    renderGroupList();
-    renderDisplayNameList();
-    ensureNameCache(); // background — no await
+    try {
+        await loadCanonicalDB();
+        renderBrowseList();
+        renderBrowseDetail();
+        ensureNameCache(); // background
+    } catch (e) {
+        console.error('[aliases] Init failed:', e.message);
+        toast('Failed to load data: ' + e.message, 'err');
+    }
 }
 
 init();

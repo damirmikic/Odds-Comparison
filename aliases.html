@@ -1,18 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Alias Manager — OddsCompare</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-        href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Outfit:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap"
-        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Outfit:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="aliases.css" />
 </head>
-
 <body>
 
     <!-- ── HEADER ──────────────────────────────────────────────── -->
@@ -29,554 +25,150 @@
         </div>
     </header>
 
-    <!-- ── TABS ────────────────────────────────────────────────── -->
-    <div class="am-tabs">
-        <button class="am-tab active" data-tab="teams">
-            <span class="am-tab-icon">👤</span> Teams
-            <span class="am-tab-count" id="tabTeamCount">0</span>
-        </button>
-        <button class="am-tab" data-tab="leagues">
-            <span class="am-tab-icon">🏆</span> Leagues
-            <span class="am-tab-count" id="tabLeagueCount">0</span>
-        </button>
-        <button class="am-tab" data-tab="unmatched">
-            <span class="am-tab-icon">🔍</span> Find Unmatched
-            <span class="am-tab-count" id="tabUnmatchedCount">—</span>
-        </button>
-        <button class="am-tab" data-tab="groups">
-            <span class="am-tab-icon">📁</span> Groups
-            <span class="am-tab-count" id="tabGroupCount">0</span>
-        </button>
-        <button class="am-tab" data-tab="parallel">
-            <span class="am-tab-icon">⬌</span> Parallel Map
-            <span class="am-tab-count" id="tabParallelCount">—</span>
-        </button>
+    <!-- ── MODE BAR ────────────────────────────────────────────── -->
+    <div class="am-modebar">
+        <div class="am-modes">
+            <button class="am-mode-btn active" data-mode="browse">📋 Browse</button>
+            <button class="am-mode-btn" data-mode="discover">🔍 Discover</button>
+        </div>
+        <div class="am-modebar-info" id="modeInfo"></div>
     </div>
 
-    <!-- ── MAIN ────────────────────────────────────────────────── -->
-    <main class="am-main">
+    <!-- ── BROWSE MODE ─────────────────────────────────────────── -->
+    <div class="am-mode-panel active" id="modeBrowse">
 
-        <!-- TEAMS TAB -->
-        <section class="am-panel active" id="panelTeams">
-            <div class="am-panel-head">
-                <h2>Team Aliases <span class="am-bk-pill am-bk-m">MRK</span> → <span class="am-bk-pill am-bk-b">MAX</span></h2>
-                <p>Map a MerkurXtip team name to its MaxBet equivalent. Used during matching as a Pass 0 (highest
-                    priority).</p>
+        <div class="am-browse-bar">
+            <div class="am-ent-toggle">
+                <button class="am-ent-btn active" data-type="teams">
+                    👤 Teams <span class="am-ent-count" id="browseTeamCount">0</span>
+                </button>
+                <button class="am-ent-btn" data-type="leagues">
+                    🏆 Leagues <span class="am-ent-count" id="browseLeagueCount">0</span>
+                </button>
             </div>
+            <input class="am-input am-search" id="browseSearch" placeholder="Search entities…" autocomplete="off" />
+            <button class="am-btn am-btn-primary" id="btnNewEntity">+ New</button>
+        </div>
 
-            <div class="am-tab-search">
-                <input class="am-input am-search" id="teamSearch" placeholder="Search team aliases…" autocomplete="off" />
-                <span class="am-tab-search-count" id="teamSearchCount"></span>
-            </div>
-
-            <!-- Add form -->
-            <div class="am-add-form" id="addTeamForm">
-                <div class="am-add-col">
-                    <label class="am-label">MerkurXtip name</label>
-                    <input class="am-input" id="inTeamMrk" placeholder="e.g. Ind. Rivadavia"
-                        list="dlMrkTeams" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">MaxBet name</label>
-                    <input class="am-input" id="inTeamMbx" placeholder="e.g. Independiente Rivadavia"
-                        list="dlMaxTeams" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddTeam">+ Add</button>
+        <div class="am-browse-layout">
+            <!-- Left: canonical entity list -->
+            <div class="am-browse-list" id="browseList">
+                <div class="am-empty">Loading…</div>
             </div>
 
-            <!-- List -->
-            <div class="am-list" id="listTeams">
-                <!-- populated by JS -->
+            <!-- Right: entity detail -->
+            <div class="am-browse-detail" id="browseDetail">
+                <div class="am-detail-empty">Select an entity from the left</div>
             </div>
+        </div>
 
-            <!-- SoccerBet team aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>Team Aliases <span class="am-bk-pill am-bk-m">MRK</span> → <span class="am-bk-pill am-bk-s">SBT</span></h2>
-                <p>Map a MerkurXtip team name to its SoccerBet equivalent. Used as Pass 0 in SoccerBet matching.</p>
-            </div>
-            <div class="am-add-form" id="addSbtTeamForm">
-                <div class="am-add-col">
-                    <label class="am-label">MerkurXtip name</label>
-                    <input class="am-input" id="inSbtTeamMrk" placeholder="e.g. Crvena zvezda"
-                        list="dlMrkTeams" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">SoccerBet name</label>
-                    <input class="am-input" id="inSbtTeamSbt" placeholder="e.g. Red Star Belgrade"
-                        list="dlSbtTeams" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddSbtTeam">+ Add</button>
-            </div>
-            <div class="am-list" id="listSbtTeams">
-                <!-- populated by JS -->
-            </div>
+    </div>
 
-            <!-- Cloudbet team aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>Team Aliases <span class="am-bk-pill am-bk-m">MRK</span> → <span class="am-bk-pill am-bk-cl">CLB</span></h2>
-                <p>Map a MerkurXtip team name to its Cloudbet equivalent. Used as Pass 0 in Cloudbet matching.</p>
-            </div>
-            <div class="am-add-form" id="addClbTeamForm">
-                <div class="am-add-col">
-                    <label class="am-label">MerkurXtip name</label>
-                    <input class="am-input" id="inClbTeamMrk" placeholder="e.g. Crvena zvezda"
-                        list="dlMrkTeams" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Cloudbet name</label>
-                    <input class="am-input" id="inClbTeamClb" placeholder="e.g. Red Star Belgrade"
-                        list="dlClbTeams" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddClbTeam">+ Add</button>
-            </div>
-            <div class="am-list" id="listClbTeams">
-                <!-- populated by JS -->
-            </div>
+    <!-- ── DISCOVER MODE ───────────────────────────────────────── -->
+    <div class="am-mode-panel" id="modeDiscover">
 
-            <!-- MaxBet ↔ SoccerBet team aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>Team Aliases <span class="am-bk-pill am-bk-b">MAX</span> → <span class="am-bk-pill am-bk-s">SBT</span></h2>
-                <p>Map a MaxBet team name to its SoccerBet equivalent. Used when Merkur doesn't carry this team.</p>
+        <div class="am-disc-toolbar">
+            <button class="am-btn am-btn-primary" id="btnDiscLoad">⟳ Load Live Data</button>
+            <div class="am-ent-toggle">
+                <button class="am-ent-btn active" data-disc-type="teams">Teams</button>
+                <button class="am-ent-btn" data-disc-type="leagues">Leagues</button>
             </div>
-            <div class="am-add-form" id="addMbxSbtTeamForm">
-                <div class="am-add-col">
-                    <label class="am-label">MaxBet name</label>
-                    <input class="am-input" id="inMbxSbtTeamMax" placeholder="e.g. Arsenal FC"
-                        list="dlMaxTeams" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">SoccerBet name</label>
-                    <input class="am-input" id="inMbxSbtTeamSbt" placeholder="e.g. Arsenal"
-                        list="dlSbtTeams" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddMbxSbtTeam">+ Add</button>
-            </div>
-            <div class="am-list" id="listMbxSbtTeams"></div>
+            <label class="am-toggle-wrap">
+                <input type="checkbox" id="chkDiscUnmapped" />
+                <span class="am-toggle-label">Unmapped only</span>
+            </label>
+        </div>
 
-            <!-- MaxBet ↔ Cloudbet team aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>Team Aliases <span class="am-bk-pill am-bk-b">MAX</span> → <span class="am-bk-pill am-bk-cl">CLB</span></h2>
-                <p>Map a MaxBet team name to its Cloudbet equivalent. Used when Merkur doesn't carry this team.</p>
-            </div>
-            <div class="am-add-form" id="addMbxClbTeamForm">
-                <div class="am-add-col">
-                    <label class="am-label">MaxBet name</label>
-                    <input class="am-input" id="inMbxClbTeamMax" placeholder="e.g. Arsenal FC"
-                        list="dlMaxTeams" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Cloudbet name</label>
-                    <input class="am-input" id="inMbxClbTeamClb" placeholder="e.g. Arsenal"
-                        list="dlClbTeams" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddMbxClbTeam">+ Add</button>
-            </div>
-            <div class="am-list" id="listMbxClbTeams"></div>
-
-            <!-- SoccerBet ↔ Cloudbet team aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>Team Aliases <span class="am-bk-pill am-bk-s">SBT</span> → <span class="am-bk-pill am-bk-cl">CLB</span></h2>
-                <p>Map a SoccerBet team name to its Cloudbet equivalent. Used when neither Merkur nor MaxBet carry this team.</p>
-            </div>
-            <div class="am-add-form" id="addSbtClbTeamForm">
-                <div class="am-add-col">
-                    <label class="am-label">SoccerBet name</label>
-                    <input class="am-input" id="inSbtClbTeamSbt" placeholder="e.g. Arsenal"
-                        list="dlSbtTeams" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Cloudbet name</label>
-                    <input class="am-input" id="inSbtClbTeamClb" placeholder="e.g. Arsenal FC"
-                        list="dlClbTeams" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddSbtClbTeam">+ Add</button>
-            </div>
-            <div class="am-list" id="listSbtClbTeams"></div>
-        </section>
-
-        <!-- LEAGUES TAB -->
-        <section class="am-panel" id="panelLeagues">
-            <div class="am-panel-head">
-                <h2>League Aliases <span class="am-bk-pill am-bk-m">MRK</span> → <span class="am-bk-pill am-bk-b">MAX</span></h2>
-                <p>Map a MerkurXtip league name to its MaxBet equivalent. Helps when the same competition has different
-                    names across bookmakers.</p>
-            </div>
-
-            <div class="am-tab-search">
-                <input class="am-input am-search" id="leagueSearch" placeholder="Search league aliases…" autocomplete="off" />
-                <span class="am-tab-search-count" id="leagueSearchCount"></span>
-            </div>
-
-            <div class="am-add-form" id="addLeagueForm">
-                <div class="am-add-col">
-                    <label class="am-label">MerkurXtip league</label>
-                    <input class="am-input" id="inLeagueMrk" placeholder="e.g. Argentina, Liga Profesional"
-                        list="dlMrkLeagues" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">MaxBet league</label>
-                    <input class="am-input" id="inLeagueMbx" placeholder="e.g. Argentina, Primera Division"
-                        list="dlMaxLeagues" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddLeague">+ Add</button>
-            </div>
-
-            <div class="am-list" id="listLeagues">
-                <!-- populated by JS -->
-            </div>
-
-            <!-- SoccerBet league aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>League Aliases <span class="am-bk-pill am-bk-m">MRK</span> → <span class="am-bk-pill am-bk-s">SBT</span></h2>
-                <p>Map a MerkurXtip league name to its SoccerBet equivalent.</p>
-            </div>
-            <div class="am-add-form" id="addSbtLeagueForm">
-                <div class="am-add-col">
-                    <label class="am-label">MerkurXtip league</label>
-                    <input class="am-input" id="inSbtLeagueMrk" placeholder="e.g. Serbia, Super Liga"
-                        list="dlMrkLeagues" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">SoccerBet league</label>
-                    <input class="am-input" id="inSbtLeagueSbt" placeholder="e.g. Srbija, SuperLiga"
-                        list="dlSbtLeagues" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddSbtLeague">+ Add</button>
-            </div>
-            <div class="am-list" id="listSbtLeagues">
-                <!-- populated by JS -->
-            </div>
-
-            <!-- Cloudbet league aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>League Aliases <span class="am-bk-pill am-bk-m">MRK</span> → <span class="am-bk-pill am-bk-cl">CLB</span></h2>
-                <p>Map a MerkurXtip league name to its Cloudbet equivalent.</p>
-            </div>
-            <div class="am-add-form" id="addClbLeagueForm">
-                <div class="am-add-col">
-                    <label class="am-label">MerkurXtip league</label>
-                    <input class="am-input" id="inClbLeagueMrk" placeholder="e.g. Serbia, Super Liga"
-                        list="dlMrkLeagues" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Cloudbet league</label>
-                    <input class="am-input" id="inClbLeagueClb" placeholder="e.g. Serbia: Super Liga"
-                        list="dlClbLeagues" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddClbLeague">+ Add</button>
-            </div>
-            <div class="am-list" id="listClbLeagues">
-                <!-- populated by JS -->
-            </div>
-
-            <!-- MaxBet ↔ SoccerBet league aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>League Aliases <span class="am-bk-pill am-bk-b">MAX</span> → <span class="am-bk-pill am-bk-s">SBT</span></h2>
-                <p>Map a MaxBet league to its SoccerBet equivalent. Used when Merkur doesn't carry this league.</p>
-            </div>
-            <div class="am-add-form" id="addMbxSbtLeagueForm">
-                <div class="am-add-col">
-                    <label class="am-label">MaxBet league</label>
-                    <input class="am-input" id="inMbxSbtLeagueMax" placeholder="e.g. Argentina, Primera Division"
-                        list="dlMaxLeagues" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">SoccerBet league</label>
-                    <input class="am-input" id="inMbxSbtLeagueSbt" placeholder="e.g. Argentina Primera"
-                        list="dlSbtLeagues" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddMbxSbtLeague">+ Add</button>
-            </div>
-            <div class="am-list" id="listMbxSbtLeagues"></div>
-
-            <!-- MaxBet ↔ Cloudbet league aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>League Aliases <span class="am-bk-pill am-bk-b">MAX</span> → <span class="am-bk-pill am-bk-cl">CLB</span></h2>
-                <p>Map a MaxBet league to its Cloudbet equivalent. Used when Merkur doesn't carry this league.</p>
-            </div>
-            <div class="am-add-form" id="addMbxClbLeagueForm">
-                <div class="am-add-col">
-                    <label class="am-label">MaxBet league</label>
-                    <input class="am-input" id="inMbxClbLeagueMax" placeholder="e.g. Argentina, Primera Division"
-                        list="dlMaxLeagues" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Cloudbet league</label>
-                    <input class="am-input" id="inMbxClbLeagueClb" placeholder="e.g. Argentina: Primera Division"
-                        list="dlClbLeagues" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddMbxClbLeague">+ Add</button>
-            </div>
-            <div class="am-list" id="listMbxClbLeagues"></div>
-
-            <!-- SoccerBet ↔ Cloudbet league aliases -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>League Aliases <span class="am-bk-pill am-bk-s">SBT</span> → <span class="am-bk-pill am-bk-cl">CLB</span></h2>
-                <p>Map a SoccerBet league to its Cloudbet equivalent. Used when neither Merkur nor MaxBet carry this league.</p>
-            </div>
-            <div class="am-add-form" id="addSbtClbLeagueForm">
-                <div class="am-add-col">
-                    <label class="am-label">SoccerBet league</label>
-                    <input class="am-input" id="inSbtClbLeagueSbt" placeholder="e.g. Serbia Super Liga"
-                        list="dlSbtLeagues" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Cloudbet league</label>
-                    <input class="am-input" id="inSbtClbLeagueClb" placeholder="e.g. Serbia: Super Liga"
-                        list="dlClbLeagues" autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddSbtClbLeague">+ Add</button>
-            </div>
-            <div class="am-list" id="listSbtClbLeagues"></div>
-
-            <!-- League Display Names -->
-            <div class="am-panel-head" style="margin-top:32px; border-top:1px solid var(--border); padding-top:24px;">
-                <h2>League Display Names</h2>
-                <p>Override the canonical name shown in the comparison view. Takes highest priority over the auto-picked
-                    name (which defaults to the MerkurXtip name).</p>
-            </div>
-            <div class="am-add-form" id="addDisplayNameForm">
-                <div class="am-add-col">
-                    <label class="am-label">MerkurXtip league</label>
-                    <input class="am-input" id="inDisplayMrk" placeholder="e.g. Argentina, Liga Profesional"
-                        list="dlMrkLeagues" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Display name</label>
-                    <input class="am-input" id="inDisplayName" placeholder="e.g. Argentina Primera Division"
-                        autocomplete="off" />
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddDisplayName">+ Set</button>
-            </div>
-            <div class="am-list" id="listDisplayNames">
-                <!-- populated by JS -->
-            </div>
-        </section>
-
-        <!-- UNMATCHED TAB -->
-        <section class="am-panel" id="panelUnmatched">
-            <div class="am-panel-head">
-                <h2>Find Unmatched Teams</h2>
-                <p>Load live data from both bookmakers and browse unmatched teams side by side. Click a pair to
-                    instantly create an alias.</p>
-            </div>
-
-            <div class="am-unmatched-toolbar">
-                <button class="am-btn am-btn-primary" id="btnLoadUnmatched">⟳ Load Live Data</button>
-                <select class="am-input am-picker-target-sel" id="pickerPairSel">
-                    <option value="mrk-max">Merkur vs MaxBet</option>
-                    <option value="mrk-sbt">Merkur vs SoccerBet</option>
-                    <option value="mrk-clb">Merkur vs Cloudbet</option>
-                    <option value="max-sbt">MaxBet vs SoccerBet</option>
-                    <option value="max-clb">MaxBet vs Cloudbet</option>
-                    <option value="sbt-clb">SoccerBet vs Cloudbet</option>
-                </select>
-                <div class="am-search-wrap">
-                    <input class="am-input am-search" id="unmatchedSearch" placeholder="Filter…"
-                        autocomplete="off" />
-                </div>
-                <label class="am-toggle-wrap">
-                    <input type="checkbox" id="chkLeagueMode" />
-                    <span class="am-toggle-label">League mode</span>
-                </label>
-                <label class="am-toggle-wrap">
-                    <input type="checkbox" id="chkBrowseAll" />
-                    <span class="am-toggle-label">Browse all</span>
-                </label>
-            </div>
-
-            <!-- Two-column picker -->
-            <div class="am-picker" id="picker">
-                <div class="am-picker-col" id="pickerMrk">
-                    <div class="am-picker-head">
-                        <span class="am-bk-dot" id="pickerSrcDot"></span>
-                        <span id="pickerSrcLabel">MerkurXtip</span>
-                        <span class="am-picker-count" id="pickerMrkCount"></span>
+        <div class="am-disc-layout">
+            <!-- 4 bookie columns -->
+            <div class="am-disc-columns" id="discColumns">
+                <div class="am-disc-col" id="discCol_merkur">
+                    <div class="am-disc-col-head">
+                        <div class="am-disc-col-head-title">
+                            <span class="am-bk-dot am-bk-m"></span>
+                            <span>MerkurXtip</span>
+                            <span class="am-disc-col-count" id="discCount_merkur"></span>
+                        </div>
+                        <input class="am-input am-disc-col-search" id="discSearch_merkur" list="dlDisc_merkur" placeholder="Search…" autocomplete="off" />
                     </div>
-                    <div class="am-picker-league-filter">
-                        <input class="am-input am-league-filter-input" id="leagueFilterMrk"
-                            list="leaguesMrkList" placeholder="Filter by league…" autocomplete="off" />
-                        <datalist id="leaguesMrkList"></datalist>
-                    </div>
-                    <div class="am-picker-list" id="listMrk">
+                    <div class="am-disc-col-list" id="discList_merkur">
                         <div class="am-picker-empty">Click "Load Live Data" to start</div>
                     </div>
                 </div>
-
-                <div class="am-picker-mid">
-                    <div class="am-pending" id="pendingDisplay">
-                        <div class="am-pending-label">Selected pair</div>
-                        <div class="am-pending-mrk" id="pendingMrk">—</div>
-                        <div class="am-pending-arrow">↕</div>
-                        <div class="am-pending-mbx" id="pendingMbx">—</div>
-                        <button class="am-btn am-btn-primary am-btn-save" id="btnSavePair" disabled>Save Alias</button>
-                        <button class="am-btn am-btn-ghost am-btn-clear-sel" id="btnClearSel">Clear</button>
+                <div class="am-disc-col" id="discCol_maxbet">
+                    <div class="am-disc-col-head">
+                        <div class="am-disc-col-head-title">
+                            <span class="am-bk-dot am-bk-b"></span>
+                            <span>MaxBet</span>
+                            <span class="am-disc-col-count" id="discCount_maxbet"></span>
+                        </div>
+                        <input class="am-input am-disc-col-search" id="discSearch_maxbet" list="dlDisc_maxbet" placeholder="Search…" autocomplete="off" />
                     </div>
-                    <div class="am-suggestions">
-                        <div class="am-sug-head">
-                            <span>✨ Suggestions</span>
-                            <button class="am-btn am-btn-primary am-sug-save-all" id="btnBulkSaveSuggestions" disabled>Save All</button>
-                        </div>
-                        <div class="am-sug-list" id="listSuggestions">
-                            <div class="am-sug-empty">Load data to see suggestions</div>
-                        </div>
+                    <div class="am-disc-col-list" id="discList_maxbet">
+                        <div class="am-picker-empty">Click "Load Live Data" to start</div>
                     </div>
                 </div>
-
-                <div class="am-picker-col" id="pickerMbx">
-                    <div class="am-picker-head">
-                        <span class="am-bk-dot" id="pickerOtherDot"></span>
-                        <span id="pickerOtherLabel">MaxBet</span>
-                        <span class="am-picker-count" id="pickerMbxCount"></span>
+                <div class="am-disc-col" id="discCol_soccerbet">
+                    <div class="am-disc-col-head">
+                        <div class="am-disc-col-head-title">
+                            <span class="am-bk-dot am-bk-s"></span>
+                            <span>SoccerBet</span>
+                            <span class="am-disc-col-count" id="discCount_soccerbet"></span>
+                        </div>
+                        <input class="am-input am-disc-col-search" id="discSearch_soccerbet" list="dlDisc_soccerbet" placeholder="Search…" autocomplete="off" />
                     </div>
-                    <div class="am-picker-league-filter">
-                        <input class="am-input am-league-filter-input" id="leagueFilterMbx"
-                            list="leaguesMbxList" placeholder="Filter by league…" autocomplete="off" />
-                        <datalist id="leaguesMbxList"></datalist>
+                    <div class="am-disc-col-list" id="discList_soccerbet">
+                        <div class="am-picker-empty">Click "Load Live Data" to start</div>
                     </div>
-                    <div class="am-picker-list" id="listMbx">
+                </div>
+                <div class="am-disc-col" id="discCol_cloudbet">
+                    <div class="am-disc-col-head">
+                        <div class="am-disc-col-head-title">
+                            <span class="am-bk-dot am-bk-cl"></span>
+                            <span>Cloudbet</span>
+                            <span class="am-disc-col-count" id="discCount_cloudbet"></span>
+                        </div>
+                        <input class="am-input am-disc-col-search" id="discSearch_cloudbet" list="dlDisc_cloudbet" placeholder="Search…" autocomplete="off" />
+                    </div>
+                    <div class="am-disc-col-list" id="discList_cloudbet">
                         <div class="am-picker-empty">Click "Load Live Data" to start</div>
                     </div>
                 </div>
             </div>
-        </section>
 
-        <!-- GROUPS TAB -->
-        <section class="am-panel" id="panelGroups">
-            <div class="am-panel-head">
-                <h2>League Groups (Countries)</h2>
-                <p>Manually assign a league to a specific country or group. Overrides the default comma-split logic.
-                    (e.g. "Champions League" → "International")</p>
+            <!-- Assignment panel -->
+            <div class="am-disc-assign" id="discAssign">
+                <div class="am-assign-empty">Load live data then select names from the columns to map them</div>
             </div>
+        </div>
 
-            <div class="am-add-form" id="addGroupForm">
-                <div class="am-add-col">
-                    <label class="am-label">League name (canonical)</label>
-                    <input class="am-input" id="inGroupLeague" placeholder="e.g. Champions League" autocomplete="off" />
-                </div>
-                <div class="am-add-arrow">→</div>
-                <div class="am-add-col">
-                    <label class="am-label">Group (Country)</label>
-                    <input class="am-input" id="inGroupTarget" placeholder="e.g. International" autocomplete="off"
-                        list="groupSuggestions" />
-                    <datalist id="groupSuggestions"></datalist>
-                </div>
-                <button class="am-btn am-btn-primary" id="btnAddGroup">+ Set</button>
-            </div>
+    </div>
 
-            <div class="am-list" id="listGroups">
-                <!-- populated by JS -->
-            </div>
-
-            <!-- ── UNGROUPED FINDER ──────────────────────────────── -->
-            <div class="am-panel-head"
-                style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 24px;">
-                <h2>Find Ungrouped Leagues</h2>
-                <p>Scan live data for leagues currently in the "Other" group. Click one to quickly assign it to a
-                    country.</p>
-            </div>
-
-            <button class="am-btn am-btn-ghost" id="btnLoadUngrouped" style="margin-bottom: 12px;">🔍 Scan for
-                Ungrouped</button>
-            <div class="am-tab-search" id="ungroupedSearchWrap" style="display:none; margin-bottom: 12px;">
-                <input class="am-input am-search" id="ungroupedSearch" placeholder="Search ungrouped leagues…" autocomplete="off" />
-                <span class="am-tab-search-count" id="ungroupedSearchCount"></span>
-            </div>
-            <div class="am-list am-ungrouped-list" id="listUngrouped">
-                <!-- populated by JS -->
-            </div>
-        </section>
-
-        <!-- PARALLEL MAP TAB -->
-        <section class="am-panel" id="panelParallel">
-            <div class="am-panel-head">
-                <h2>Parallel League Mapping</h2>
-                <p>Select a Merkur league or team as anchor, review auto-suggestions for all bookmakers, then save all pairs at once.</p>
-            </div>
-
-            <div class="am-pm-toolbar">
-                <button class="am-btn am-btn-primary" id="btnPmLoad">⟳ Load Data</button>
-                <input class="am-input am-search" id="pmMrkSearch" placeholder="Search Merkur leagues…" autocomplete="off" />
-                <label class="am-toggle-wrap">
-                    <input type="checkbox" id="chkPmTeamMode" />
-                    <span class="am-toggle-label">Team mode</span>
-                </label>
-                <label class="am-toggle-wrap">
-                    <input type="checkbox" id="chkPmUnmappedOnly" />
-                    <span class="am-toggle-label">Unmapped only</span>
-                </label>
-            </div>
-
-            <div class="am-pm-grid" id="pmGrid">
-                <!-- Left: Merkur league list -->
-                <div class="am-pm-left am-picker-col">
-                    <div class="am-picker-head">
-                        <span class="am-bk-dot am-bk-m"></span>
-                        <span>MerkurXtip</span>
-                        <span class="am-picker-count" id="pmMrkCount"></span>
-                    </div>
-                    <div class="am-picker-list" id="pmMrkList">
-                        <div class="am-picker-empty">Click "Load Data" to start</div>
-                    </div>
-                </div>
-
-                <!-- Right: Detail + Bulk -->
-                <div class="am-pm-right">
-                    <!-- Mapping detail panel -->
-                    <div class="am-pm-detail" id="pmDetail">
-                        <div class="am-pm-detail-empty">Select a league from the left</div>
-                    </div>
-
-                    <!-- Bulk suggestions -->
-                    <div class="am-suggestions am-pm-bulk">
-                        <div class="am-sug-head">
-                            <span>✨ Bulk Suggestions</span>
-                            <button class="am-btn am-btn-primary am-sug-save-all" id="btnPmBulkSave" disabled>Save All</button>
-                        </div>
-                        <div class="am-sug-list" id="pmBulkList">
-                            <div class="am-sug-empty">Load data to see suggestions</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-    </main>
-
-    <!-- ── DATALISTS (populated by JS from live API) ────────── -->
-    <datalist id="dlMrkLeagues"></datalist>
-    <datalist id="dlMaxLeagues"></datalist>
-    <datalist id="dlSbtLeagues"></datalist>
-    <datalist id="dlClbLeagues"></datalist>
-    <datalist id="dlMrkTeams"></datalist>
-    <datalist id="dlMaxTeams"></datalist>
-    <datalist id="dlSbtTeams"></datalist>
-    <datalist id="dlClbTeams"></datalist>
-
-    <!-- ── TOAST ────────────────────────────────────────────────── -->
+    <!-- ── TOAST ─────────────────────────────────────────────── -->
     <div class="am-toast" id="toast"></div>
 
-    <!-- ── PARALLEL MAP TOOLTIP ─────────────────────────────────── -->
-    <div class="am-pm-tooltip" id="pmTooltip"></div>
+    <!-- ── NEW ENTITY MODAL ──────────────────────────────────── -->
+    <div class="am-modal-overlay" id="newEntityModal">
+        <div class="am-modal">
+            <div class="am-modal-head" id="newEntityModalTitle">New Team</div>
+            <input class="am-input am-modal-input" id="newEntityName" placeholder="Canonical name…" autocomplete="off" />
+            <div id="newEntityLeagueFields" style="display:none;">
+                <input class="am-input am-modal-input" id="newEntityCountry" placeholder="Country (optional)…" autocomplete="off" />
+                <input class="am-input am-modal-input" id="newEntityGroup" placeholder="Group (optional)…" autocomplete="off" />
+                <input class="am-input am-modal-input" id="newEntityDisplay" placeholder="Display name (optional)…" autocomplete="off" />
+            </div>
+            <div class="am-modal-actions">
+                <button class="am-btn am-btn-primary" id="btnNewEntityConfirm">Create</button>
+                <button class="am-btn am-btn-ghost" id="btnNewEntityCancel">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-    <!-- ── IMPORT MODAL ─────────────────────────────────────────── -->
+    <!-- ── IMPORT MODAL ──────────────────────────────────────── -->
     <div class="am-modal-overlay" id="importModal">
         <div class="am-modal">
             <div class="am-modal-head">Import Aliases (JSON)</div>
-            <textarea class="am-modal-textarea" id="importText" placeholder='Paste exported JSON here…'></textarea>
+            <textarea class="am-modal-textarea" id="importText" placeholder="Paste exported JSON here…"></textarea>
             <div class="am-modal-actions">
                 <button class="am-btn am-btn-primary" id="btnImportConfirm">Import</button>
                 <button class="am-btn am-btn-ghost" id="btnImportCancel">Cancel</button>
@@ -584,9 +176,24 @@
         </div>
     </div>
 
+    <!-- ── DATALISTS (discover column search) ──────────────── -->
+    <datalist id="dlDisc_merkur"></datalist>
+    <datalist id="dlDisc_maxbet"></datalist>
+    <datalist id="dlDisc_soccerbet"></datalist>
+    <datalist id="dlDisc_cloudbet"></datalist>
+
+    <!-- ── DATALISTS (autocomplete for add-alias form) ─────── -->
+    <datalist id="dlMrkTeams"></datalist>
+    <datalist id="dlMaxTeams"></datalist>
+    <datalist id="dlSbtTeams"></datalist>
+    <datalist id="dlClbTeams"></datalist>
+    <datalist id="dlMrkLeagues"></datalist>
+    <datalist id="dlMaxLeagues"></datalist>
+    <datalist id="dlSbtLeagues"></datalist>
+    <datalist id="dlClbLeagues"></datalist>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="aliases.js"></script>
     <script src="aliases-ui.js"></script>
 </body>
-
 </html>
